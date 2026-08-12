@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Biométricos Colaboradores | Ubictum</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --azul: #54a4b3;
+    --azul-dark: #3f8290;
+    --gris: #636469;
+    --gris-light: #f2f3f4;
+    --gris-line: #dfe1e3;
+    --blanco: #ffffff;
+    --negro: #000000;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--gris-light);
+    color: var(--negro);
+  }
+  header{
+    background: var(--negro);
+    color: var(--blanco);
+    padding: 13px 32px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  header .brand{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  header .brand strong{
+    font-size: 20px;
+    letter-spacing: 1px;
+  }
+  header .brand span{
+    font-size: 12px;
+    color: var(--azul);
+    letter-spacing: 0.5px;
+  }
+  header .module{
+    font-size: 13px;
+    color: #c9c9c9;
+    border-left: 2px solid var(--azul);
+    padding-left: 14px;
+  }
+  main{
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 22px 24px 60px;
+  }
+  h1{
+    font-size: 22px;
+    margin: 0 0 4px;
+  }
+  p.lead{
+    color: var(--gris);
+    margin: 0 0 16px;
+    font-size: 14px;
+  }
+  .steps{
+    display:flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .step{
+    flex:1;
+    min-width: 150px;
+    background: var(--blanco);
+    border: 1px solid var(--gris-line);
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gris);
+    position: relative;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .15s, background .15s, color .15s, opacity .15s;
+  }
+  .step:disabled{
+    cursor: not-allowed;
+    opacity: .5;
+  }
+  .step:not(:disabled):hover{
+    border-color: var(--azul);
+  }
+  .status-row{
+    display:flex;
+    align-items:center;
+    gap: 14px;
+    margin-bottom: 18px;
+    min-height: 18px;
+  }
+  .filename{
+    font-size: 13px;
+    color: var(--azul-dark);
+    font-weight: 600;
+  }
+  .step.active{
+    border-color: var(--azul);
+    box-shadow: inset 0 0 0 1px var(--azul);
+  }
+  .step .num{
+    display:inline-block;
+    width:20px; height:20px;
+    border-radius:50%;
+    background: var(--gris-line);
+    color: var(--negro);
+    font-size:11px;
+    text-align:center;
+    line-height:20px;
+    margin-right:8px;
+    font-weight:600;
+  }
+  .step.active .num{
+    background: var(--azul);
+    color: var(--blanco);
+  }
+  .step.done .num{
+    background: var(--negro);
+    color: var(--blanco);
+  }
+  .card{
+    background: var(--blanco);
+    border: 1px solid var(--gris-line);
+    border-radius: 8px;
+    padding: 18px 24px;
+    margin-bottom: 20px;
+  }
+  .dropzone{
+    border: 2px dashed var(--gris-line);
+    border-radius: 8px;
+    padding: 20px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.drag{
+    border-color: var(--azul);
+    background: rgba(84,164,179,0.06);
+  }
+  .dropzone svg{ margin-bottom: 10px; }
+  .dropzone p{
+    margin: 4px 0;
+    font-size: 14px;
+  }
+  .dropzone .filename{
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--azul-dark);
+    font-weight: 600;
+  }
+  input[type=file]{ display:none; }
+  .actions{
+    display:flex;
+    align-items:center;
+    gap: 14px;
+    margin-top: 20px;
+  }
+  button{
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    padding: 11px 22px;
+    cursor: pointer;
+    transition: background .15s, opacity .15s;
+  }
+  button.primary{
+    background: var(--azul);
+    color: var(--blanco);
+  }
+  button.primary:hover:not(:disabled){ background: var(--azul-dark); }
+  button.primary:disabled{
+    background: #b8c6c9;
+    cursor: not-allowed;
+  }
+  button.secondary{
+    background: var(--negro);
+    color: var(--blanco);
+  }
+  button.secondary:hover{ opacity: .85; }
+  button.ghost{
+    background: transparent;
+    color: var(--gris);
+    border: 1px solid var(--gris-line);
+  }
+  button.ghost:hover{
+    color: var(--negro);
+    border-color: var(--gris);
+  }
+  .status{
+    font-size: 13px;
+    color: var(--gris);
+  }
+  .status.error{ color: #b3413f; }
+  .results-layout{
+    display: grid;
+    grid-template-columns: 170px 1fr;
+    gap: 20px;
+    align-items: start;
+    margin-top: 20px;
+  }
+  .stats-sidebar{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .stats-sidebar .box{
+    background: var(--gris-light);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .stats-sidebar .box .n{
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .stats-sidebar .box .l{
+    font-size: 11.5px;
+    color: var(--gris);
+    margin-top: 2px;
+  }
+  .filters{
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 14px;
+  }
+  .filters input, .filters select{
+    font-family: inherit;
+    font-size: 13px;
+    padding: 9px 11px;
+    border: 1px solid var(--gris-line);
+    border-radius: 6px;
+    background: var(--blanco);
+    color: var(--negro);
+  }
+  .filters input{
+    flex: 1;
+    min-width: 140px;
+  }
+  .filters select{
+    min-width: 160px;
+  }
+  @media (max-width: 720px){
+    .results-layout{ grid-template-columns: 1fr; }
+    .stats-sidebar{ flex-direction: row; flex-wrap: wrap; }
+    .stats-sidebar .box{ flex: 1; min-width: 120px; }
+  }
+  details.notes{
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--gris);
+  }
+  details.notes summary{
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--negro);
+  }
+  details.notes ul{
+    margin: 10px 0 0;
+    padding-left: 18px;
+    line-height: 1.6;
+  }
+  table{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    margin-top: 4px;
+  }
+  thead th{
+    background: var(--negro);
+    color: var(--blanco);
+    text-align: left;
+    padding: 9px 10px;
+    position: sticky;
+    top: 0;
+  }
+  tbody td{
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--gris-line);
+    white-space: nowrap;
+  }
+  tbody tr:nth-child(even){ background: var(--gris-light); }
+  .table-wrap{
+    max-height: 420px;
+    overflow: auto;
+    border: 1px solid var(--gris-line);
+    border-radius: 6px;
+    margin-top: 14px;
+  }
+  .table-note{
+    font-size: 12px;
+    color: var(--gris);
+    margin-top: 8px;
+  }
+  .hidden{ display:none !important; }
+  .extra{ color: #b3413f; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <strong>UBICTUM</strong>
+    <span>La puerta de entrada al mercado</span>
+  </div>
+  <div class="module">Biométricos Colaboradores &middot; BT</div>
+</header>
+
+<main>
+  <h1>Organizar registros de biométricos</h1>
+  <p class="lead">Sube el excel crudo exportado del sistema de biométricos, aplica las reglas de acomodo por turno y descarga el archivo ya organizado por día.</p>
+
+  <div class="steps">
+    <button class="step active" id="step1" type="button"><span class="num">1</span>Subir excel</button>
+    <button class="step" id="step2" type="button" disabled><span class="num">2</span>Generar archivo</button>
+    <button class="step" id="step3" type="button" disabled><span class="num">3</span>Descargar</button>
+    <button class="ghost" id="resetBtn" type="button">Subir otro archivo</button>
+  </div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" class="hidden">
+  <div class="status-row">
+    <span class="filename" id="filename"></span>
+    <span class="status" id="status"></span>
+  </div>
+
+  <div id="resultsBlock" class="card hidden">
+    <div class="results-layout">
+      <div class="stats-sidebar">
+        <div class="box"><div class="n" id="sumFilas">0</div><div class="l">Filas generadas</div></div>
+        <div class="box"><div class="n" id="sumColab">0</div><div class="l">Colaboradores</div></div>
+        <div class="box"><div class="n" id="sumOrigen">0</div><div class="l">Registros leídos</div></div>
+        <div class="box"><div class="n" id="sumOmitidos">0</div><div class="l">Registros omitidos</div></div>
+      </div>
+
+      <div class="results-main">
+        <div class="filters">
+          <input type="text" id="filtroId" placeholder="Filtrar por ID">
+          <input type="text" id="filtroNombre" placeholder="Filtrar por Nombre">
+          <select id="filtroArea"><option value="">Todas las áreas</option></select>
+          <select id="filtroTurno">
+            <option value="">Todos los turnos</option>
+            <option value="Matutino">Matutino</option>
+            <option value="Vespertino">Vespertino</option>
+            <option value="Nocturno">Nocturno</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Nombre</th><th>Área</th><th>Turno</th><th>Fecha</th>
+                <th>Hora Entrada</th><th>Hora Salida</th><th>Horas Estancia</th><th>Tiempo Extra</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <p class="table-note" id="tableNote">Vista previa. El archivo descargado incluye el total.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const filenameEl = document.getElementById('filename');
+const resetBtn = document.getElementById('resetBtn');
+const statusEl = document.getElementById('status');
+const resultsBlock = document.getElementById('resultsBlock');
+const tbody = document.getElementById('tbody');
+const filtroId = document.getElementById('filtroId');
+const filtroNombre = document.getElementById('filtroNombre');
+const filtroArea = document.getElementById('filtroArea');
+const filtroTurno = document.getElementById('filtroTurno');
+const tableNote = document.getElementById('tableNote');
+const step1 = document.getElementById('step1');
+const step2 = document.getElementById('step2');
+const step3 = document.getElementById('step3');
+
+let selectedFile = null;
+let outputRows = null; // final computed rows, kept for download
+
+step1.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file){
+  selectedFile = file;
+  filenameEl.textContent = file.name;
+  statusEl.textContent = '';
+  statusEl.className = 'status';
+  resultsBlock.classList.add('hidden');
+  step1.classList.add('done');
+  step2.classList.add('active');
+  step2.disabled = false;
+  step3.classList.remove('active','done');
+  step3.disabled = true;
+}
+
+function resetTool(){
+  selectedFile = null;
+  outputRows = null;
+  fileInput.value = '';
+  filenameEl.textContent = '';
+  statusEl.textContent = '';
+  statusEl.className = 'status';
+  resultsBlock.classList.add('hidden');
+  tbody.innerHTML = '';
+  filtroId.value = '';
+  filtroNombre.value = '';
+  filtroTurno.value = '';
+  filtroArea.innerHTML = '<option value="">Todas las áreas</option>';
+  step1.classList.remove('done');
+  step1.classList.add('active');
+  step2.classList.remove('active','done');
+  step2.disabled = true;
+  step3.classList.remove('active','done');
+  step3.disabled = true;
+}
+resetBtn.addEventListener('click', resetTool);
+
+step2.addEventListener('click', () => {
+  if (!selectedFile) return;
+  statusEl.textContent = 'Procesando…';
+  statusEl.className = 'status';
+  step2.disabled = true;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array', cellDates: false });
+      const result = procesarArchivo(wb);
+      outputRows = result.rows;
+      pintarResultados(result);
+      statusEl.textContent = 'Listo.';
+      step2.classList.add('done');
+      step3.classList.add('active');
+      step3.disabled = false;
+    } catch (err) {
+      console.error(err);
+      statusEl.textContent = 'Error al procesar el archivo: ' + err.message;
+      statusEl.className = 'status error';
+    } finally {
+      step2.disabled = false;
+    }
+  };
+  reader.readAsArrayBuffer(selectedFile);
+});
+
+step3.addEventListener('click', () => {
+  if (!outputRows) return;
+  const exportRows = outputRows.map(({_revisar, ...rest}) => rest);
+  const ws = XLSX.utils.json_to_sheet(exportRows);
+  ws['!cols'] = [
+    {wch:10},{wch:32},{wch:16},{wch:12},{wch:12},{wch:12},{wch:12},{wch:14},{wch:12}
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Asistencias por día');
+  const hoy = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Biometricos_Organizado_${hoy}.xlsx`);
+  step3.classList.add('done');
+});
+
+// ---------- Lógica de negocio ----------
+
+function procesarArchivo(wb){
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+
+  // localizar fila de encabezados: primera celda == 'Nombre de archivo'
+  let headerIdx = rows.findIndex(r => r && r[0] === 'Nombre de archivo');
+  if (headerIdx === -1) throw new Error('No se encontró el encabezado esperado en el excel.');
+
+  const dataRows = rows.slice(headerIdx + 1);
+
+  let leidos = 0;
+  let omitidos = 0;
+
+  // records: array de {id, nombre, area, turno, dt}
+  const records = [];
+
+  dataRows.forEach(r => {
+    if (!r || r.length === 0 || r[1] == null) return;
+    leidos++;
+    const nombre = String(r[0] ?? '').trim();
+    const id = String(r[1] ?? '').trim();
+    const tipoPersona = r[6];
+    const grupo = String(r[7] ?? '');
+    const tiempoRaw = r[8];
+
+    if (tipoPersona !== 'Persona') { omitidos++; return; }
+
+    const partes = grupo.split('>').map(p => p.trim());
+    const idxAlmacen = partes.findIndex(p => p === 'Almacén' || p === 'Almacen');
+    if (idxAlmacen === -1 || idxAlmacen + 2 >= partes.length) { omitidos++; return; }
+
+    const turnoTexto = partes[idxAlmacen + 1];
+    const area = partes[idxAlmacen + 2];
+
+    let turno = null;
+    if (/diurno/i.test(turnoTexto)) turno = 'Matutino';
+    else if (/vespertino/i.test(turnoTexto)) turno = 'Vespertino';
+    else if (/nocturno/i.test(turnoTexto)) turno = 'Nocturno';
+    if (!turno) { omitidos++; return; }
+
+    const dt = parseFechaHora(tiempoRaw);
+    if (!dt) { omitidos++; return; }
+
+    records.push({ id, nombre, area, turno, dt });
+  });
+
+  // agrupar por ID + turno
+  const grupos = new Map(); // key: id|turno -> {nombre, area(mas comun), byDate: Map(dateStr -> records[])}
+  records.forEach(rec => {
+    const key = rec.id + '|' + rec.turno;
+    if (!grupos.has(key)) {
+      grupos.set(key, { id: rec.id, nombre: rec.nombre, turno: rec.turno, byDate: new Map(), areaCount: new Map() });
+    }
+    const g = grupos.get(key);
+    const dateStr = toDateStr(rec.dt);
+    if (!g.byDate.has(dateStr)) g.byDate.set(dateStr, []);
+    g.byDate.get(dateStr).push(rec);
+    g.areaCount.set(rec.area, (g.areaCount.get(rec.area) || 0) + 1);
+  });
+
+  const outRows = [];
+
+  grupos.forEach(g => {
+    const areaFinal = [...g.areaCount.entries()].sort((a,b) => b[1]-a[1])[0][0];
+    const dates = [...g.byDate.keys()].sort();
+
+    if (g.turno === 'Nocturno') {
+      // Puede haber N registros en un mismo día (rebotes de biométrico, cierres duplicados, etc.),
+      // así que no basta con emparejar consecutivos. Se separa cada día en dos ventanas:
+      // "cierre" (antes de las 10:00, son salidas de la jornada de la noche anterior) y
+      // "entrada" (10:00 en adelante, es el inicio de la jornada de esa noche).
+      // Entrada = primer registro del día en la ventana de entrada (>=10:00).
+      // Salida = último registro del día siguiente en la ventana de cierre (<10:00).
+      dates.forEach(dateStr => {
+        const dayRecs = g.byDate.get(dateStr).slice().sort((a,b) => a.dt - b.dt);
+        const entradaRecs = dayRecs.filter(r => r.dt.getHours() >= 10);
+        if (entradaRecs.length === 0) return; // este día solo trae cierre, no inicia turno
+        const entrada = entradaRecs[0].dt;
+
+        const nextDateStr = toDateStr(addDays(parseDateStr(dateStr), 1));
+        const nextDayRecs = (g.byDate.get(nextDateStr) || []).slice().sort((a,b) => a.dt - b.dt);
+        const cierreRecs = nextDayRecs.filter(r => r.dt.getHours() < 10);
+        const salida = cierreRecs.length ? cierreRecs[cierreRecs.length - 1].dt : null;
+
+        outRows.push(construirFila(g, areaFinal, dateStr, entrada, salida, salida ? 2 : 1));
+      });
+    } else {
+      dates.forEach(dateStr => {
+        const dayRecs = g.byDate.get(dateStr).slice().sort((a,b) => a.dt - b.dt);
+        const entrada = dayRecs[0].dt;
+        const salida = dayRecs.length === 1 ? dayRecs[0].dt : dayRecs[dayRecs.length - 1].dt;
+        outRows.push(construirFila(g, areaFinal, dateStr, entrada, salida, dayRecs.length));
+      });
+    }
+  });
+
+  outRows.sort((a,b) =>
+    a.Area.localeCompare(b.Area) ||
+    a.Turno.localeCompare(b.Turno) ||
+    a.ID.localeCompare(b.ID) ||
+    a.Fecha.localeCompare(b.Fecha)
+  );
+
+  return {
+    rows: outRows,
+    leidos,
+    omitidos,
+    colaboradores: new Set(records.map(r => r.id)).size
+  };
+}
+
+function construirFila(g, area, fechaAnclaStr, entrada, salida, numRegistrosDia){
+  const soloUnRegistro = numRegistrosDia === 1;
+  const sinSalida = !salida;
+
+  let horasEstancia = '-';
+  let tiempoExtra = '-';
+  let horaEntradaTxt = formatHora(entrada);
+  let horaSalidaTxt = sinSalida ? '-' : formatHora(salida);
+
+  if (!sinSalida) {
+    const horasDec = (salida - entrada) / 3600000;
+    horasEstancia = formatDuracion(horasDec);
+
+    const fechaAncla = parseDateStr(fechaAnclaStr);
+    const weekday = fechaAncla.getDay(); // 0=domingo,6=sabado
+
+    let base;
+    if (g.turno === 'Nocturno') {
+      base = (weekday === 6) ? 0 : 7; // sábado (entra el sábado en la noche) = todo extra
+    } else {
+      if (weekday === 0) base = 0; // domingo = todo extra
+      else if (g.turno === 'Matutino') base = 8;
+      else base = (weekday === 6) ? 5 : 8; // Vespertino
+    }
+    const extraDec = Math.max(0, horasDec - base);
+    tiempoExtra = redondearHoraExtra(extraDec);
+  }
+
+  return {
+    ID: g.id,
+    Nombre: g.nombre,
+    Area: area,
+    Turno: g.turno,
+    Fecha: fechaAnclaStr,
+    'Hora Entrada': horaEntradaTxt,
+    'Hora Salida': horaSalidaTxt,
+    'Horas Estancia': horasEstancia,
+    'Tiempo Extra': tiempoExtra,
+    _revisar: soloUnRegistro
+  };
+}
+
+function parseFechaHora(v){
+  if (v == null) return null;
+  if (typeof v === 'string') {
+    const d = new Date(v.replace(' ', 'T'));
+    return isNaN(d) ? null : d;
+  }
+  if (typeof v === 'number') {
+    // serial de excel
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    return new Date(epoch.getTime() + v * 86400000);
+  }
+  return null;
+}
+function toDateStr(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function parseDateStr(s){
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function addDays(d, n){
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+function formatHora(d){
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+}
+function formatDuracion(horasDec){
+  const totalMin = Math.round(horasDec * 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+function redondearHoraExtra(horasDec){
+  // Regla: si los minutos de la fracción son > 30, sube a la siguiente hora.
+  // Si son <= 30, baja (se descartan). Ej: 1:31 -> 2:00, 0:40 -> 1:00, 1:30 -> 1:00, 0:28 -> 0:00
+  const totalMin = horasDec * 60;
+  const horas = Math.floor(totalMin / 60);
+  const minutosResto = totalMin - horas * 60;
+  const horasRedondeadas = minutosResto > 30 ? horas + 1 : horas;
+  return String(horasRedondeadas).padStart(2,'0') + ':00';
+}
+
+// ---------- Render y descarga ----------
+
+function pintarResultados(result){
+  document.getElementById('sumFilas').textContent = result.rows.length;
+  document.getElementById('sumColab').textContent = result.colaboradores;
+  document.getElementById('sumOrigen').textContent = result.leidos;
+  document.getElementById('sumOmitidos').textContent = result.omitidos;
+
+  filtroId.value = '';
+  filtroNombre.value = '';
+  filtroTurno.value = '';
+  const areas = [...new Set(result.rows.map(r => r.Area))].sort();
+  filtroArea.innerHTML = '<option value="">Todas las áreas</option>' +
+    areas.map(a => `<option value="${a}">${a}</option>`).join('');
+  filtroArea.value = '';
+
+  renderTabla();
+  resultsBlock.classList.remove('hidden');
+}
+
+function renderTabla(){
+  if (!outputRows) return;
+  const idQ = filtroId.value.trim().toLowerCase();
+  const nombreQ = filtroNombre.value.trim().toLowerCase();
+  const areaQ = filtroArea.value;
+  const turnoQ = filtroTurno.value;
+
+  const filtradas = outputRows.filter(r =>
+    (!idQ || r.ID.toLowerCase().includes(idQ)) &&
+    (!nombreQ || r.Nombre.toLowerCase().includes(nombreQ)) &&
+    (!areaQ || r.Area === areaQ) &&
+    (!turnoQ || r.Turno === turnoQ)
+  );
+
+  const LIMITE_VISTA = 5000; // tope de seguridad para no congelar el navegador con archivos muy grandes
+
+  tbody.innerHTML = '';
+  filtradas.slice(0, LIMITE_VISTA).forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.ID}</td>
+      <td>${r.Nombre}</td>
+      <td>${r.Area}</td>
+      <td>${r.Turno}</td>
+      <td>${r.Fecha}</td>
+      <td>${r['Hora Entrada']}</td>
+      <td>${r['Hora Salida']}</td>
+      <td>${r['Horas Estancia']}</td>
+      <td class="${parseFloat(r['Tiempo Extra']) > 0 ? 'extra' : ''}">${r['Tiempo Extra']}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const hayFiltro = idQ || nombreQ || areaQ || turnoQ;
+  tableNote.textContent = hayFiltro
+    ? `${filtradas.length} fila(s) cumplen el filtro${filtradas.length > LIMITE_VISTA ? ` (mostrando las primeras ${LIMITE_VISTA})` : ''}. El archivo descargado incluye el total sin filtrar (${outputRows.length}).`
+    : `Mostrando ${Math.min(LIMITE_VISTA, outputRows.length)} de ${outputRows.length} filas.`;
+}
+
+[filtroId, filtroNombre].forEach(el => el.addEventListener('input', renderTabla));
+[filtroArea, filtroTurno].forEach(el => el.addEventListener('change', renderTabla));
+</script>
+
+</body>
+</html>
