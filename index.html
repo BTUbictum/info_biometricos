@@ -50,6 +50,79 @@
     border-left: 2px solid var(--azul);
     padding-left: 14px;
   }
+  header .right-side{
+    display:flex;
+    align-items:center;
+    gap:20px;
+  }
+  .auth-status{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    font-size:13px;
+  }
+  .auth-pill{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    color:#7fe8b0;
+  }
+  .auth-pill::before{
+    content:"";
+    width:7px; height:7px;
+    border-radius:50%;
+    background:#38d97a;
+    box-shadow:0 0 0 3px rgba(56,217,122,.2);
+  }
+  .auth-user-chip{
+    background:rgba(255,255,255,.12);
+    padding:7px 14px;
+    border-radius:20px;
+    font-size:12.5px;
+    color:#fff;
+  }
+  .auth-user-chip b{ font-weight:600; }
+  .auth-btn{
+    border:1px solid rgba(255,255,255,.35);
+    background:transparent;
+    color:#fff;
+    padding:7px 16px;
+    border-radius:8px;
+    font-family:inherit;
+    font-size:13px;
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  .auth-btn:hover{ background:rgba(255,255,255,.12); }
+  .auth-btn.primary{
+    background:#fff;
+    color:#14343a;
+    border-color:#fff;
+    font-weight:600;
+  }
+  .auth-btn.primary:hover{ background:#e9f3f4; }
+
+  .gate{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    text-align:center;
+    padding:100px 40px;
+  }
+  .gate-title{
+    font-size:20px;
+    font-weight:700;
+    color:var(--negro);
+  }
+  .gate-subtitle{
+    color:var(--gris);
+    font-size:14px;
+    max-width:360px;
+  }
+  main{ display:none; }
+  main.visible{ display:block; }
   main{
     max-width: 1500px;
     margin: 0 auto;
@@ -315,10 +388,20 @@
     <strong>UBICTUM</strong>
     <span>La puerta de entrada al mercado</span>
   </div>
-  <div class="module">Biométricos Colaboradores &middot; BT</div>
+  <div class="right-side">
+    <div class="module">Biométricos Colaboradores &middot; BT</div>
+    <div class="auth-status" id="authStatus">
+      <!-- se llena por JS: pill "Conectado" + chip de usuario + botón, o botón de iniciar sesión -->
+    </div>
+  </div>
 </header>
 
-<main>
+<div class="gate" id="gate">
+  <div class="gate-title">Verificando tu sesión…</div>
+  <div class="gate-subtitle">Un momento, estamos confirmando tu acceso a Biométricos Colaboradores.</div>
+</div>
+
+<main id="mainContent">
   <h1>Organizar registros de biométricos</h1>
   <p class="lead">Sube el excel crudo exportado del sistema de biométricos, aplica las reglas de acomodo por turno y descarga el archivo ya organizado por día.</p>
 
@@ -373,6 +456,7 @@
   </div>
 </main>
 
+<script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
 <script>
 const fileInput = document.getElementById('fileInput');
 const filenameEl = document.getElementById('filename');
@@ -734,6 +818,96 @@ function renderTabla(){
 
 [filtroId, filtroNombre].forEach(el => el.addEventListener('input', renderTabla));
 [filtroArea, filtroTurno].forEach(el => el.addEventListener('change', renderTabla));
+
+/* ============================================================
+ * AUTENTICACIÓN — MSAL.js contra U-Biometricos (Entra ID)
+ * ------------------------------------------------------------
+ * Misma identidad y flujo que el resto de portales U-*.
+ * ============================================================ */
+const msalConfig = {
+  auth: {
+    clientId: "390003b8-ac7e-4b28-95fa-92da2fbe08de",
+    authority: "https://login.microsoftonline.com/5b149376-e794-49a0-a90d-7e8dab892910",
+    redirectUri: "https://btubictum.github.io/info_biometricos/",
+  },
+  cache: {
+    cacheLocation: "localStorage",
+    storeAuthStateInCookie: false,
+  },
+};
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+function nombreCorto(account){
+  return account.name || account.username;
+}
+
+function mostrarSesionActiva(account){
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('mainContent').classList.add('visible');
+
+  document.getElementById('authStatus').innerHTML = `
+    <span class="auth-pill">Conectado</span>
+    <span class="auth-user-chip"><b>${nombreCorto(account)}</b> · ${account.username}</span>
+    <button class="auth-btn" id="btnLogout">Cerrar sesión</button>
+  `;
+  document.getElementById('btnLogout').addEventListener('click', () => {
+    msalInstance.logoutRedirect();
+  });
+}
+
+function mostrarBotonLogin(){
+  document.getElementById('gate').innerHTML = `
+    <div class="gate-title">Inicia sesión para continuar</div>
+    <div class="gate-subtitle">Biométricos Colaboradores es un portal interno de Ubictum — usa tu cuenta de correo institucional.</div>
+  `;
+  document.getElementById('authStatus').innerHTML = `
+    <button class="auth-btn primary" id="btnLogin">Iniciar sesión</button>
+  `;
+  document.getElementById('btnLogin').addEventListener('click', hacerLogin);
+}
+
+async function hacerLogin(){
+  try {
+    const resp = await msalInstance.loginPopup({ scopes: ["User.Read"] });
+    msalInstance.setActiveAccount(resp.account);
+    mostrarSesionActiva(resp.account);
+  } catch (err) {
+    console.error("Error al iniciar sesión:", err);
+    document.getElementById('gate').innerHTML = `
+      <div class="gate-title">No se pudo iniciar sesión</div>
+      <div class="gate-subtitle">${err.errorMessage || err.message || 'Intenta de nuevo.'}</div>
+      <button class="auth-btn primary" id="btnRetryLogin" style="margin-top:6px;">Reintentar</button>
+    `;
+    document.getElementById('btnRetryLogin').addEventListener('click', hacerLogin);
+  }
+}
+
+async function initAuth(){
+  await msalInstance.initialize();
+
+  let account = null;
+  const cuentas = msalInstance.getAllAccounts();
+
+  if (cuentas.length > 0) {
+    account = cuentas[0];
+  } else {
+    try {
+      const silentResp = await msalInstance.ssoSilent({ scopes: ["User.Read"] });
+      account = silentResp.account;
+    } catch (e) {
+      account = null;
+    }
+  }
+
+  if (account) {
+    msalInstance.setActiveAccount(account);
+    mostrarSesionActiva(account);
+  } else {
+    mostrarBotonLogin();
+  }
+}
+
+initAuth();
 </script>
 
 </body>
