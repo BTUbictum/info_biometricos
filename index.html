@@ -885,18 +885,25 @@ async function hacerLogin(){
 async function initAuth(){
   await msalInstance.initialize();
 
+  // Ver nota en headcount.html: los portales U-* comparten localStorage
+  // (mismo dominio), así que nunca confiamos en getAllAccounts() por sí
+  // solo — siempre pedimos un token específico para ESTA app.
   let account = null;
   const cuentas = msalInstance.getAllAccounts();
 
-  if (cuentas.length > 0) {
-    account = cuentas[0];
-  } else {
-    try {
-      const silentResp = await msalInstance.ssoSilent({ scopes: ["User.Read"] });
-      account = silentResp.account;
-    } catch (e) {
-      account = null;
+  try {
+    let tokenResp;
+    if (cuentas.length > 0) {
+      tokenResp = await msalInstance.acquireTokenSilent({
+        scopes: ["User.Read"],
+        account: cuentas[0],
+      });
+    } else {
+      tokenResp = await msalInstance.ssoSilent({ scopes: ["User.Read"] });
     }
+    account = tokenResp.account;
+  } catch (e) {
+    account = null;
   }
 
   if (account) {
