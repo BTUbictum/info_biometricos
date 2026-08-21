@@ -448,13 +448,13 @@
 <main id="mainContent">
 
 <div class="tabbar" id="tabbar">
-  <button class="tabbtn active" data-tab="acomodo" type="button">Descargar Organizado</button>
-  <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
+  <button class="tabbtn active" data-tab="carga" type="button">Carga de Data</button>
+  <button class="tabbtn" data-tab="acomodo" type="button">Descargar Organizado</button>
 </div>
 
-<div class="tabpanel active" id="tab-acomodo">
+<div class="tabpanel" id="tab-acomodo">
   <h1>Organizar registros de biométricos</h1>
   <p class="lead">Sube el excel crudo exportado del sistema de biométricos, aplica las reglas de acomodo por turno y descarga el archivo ya organizado por día.</p>
 
@@ -509,7 +509,7 @@
   </div>
 </div><!-- /tab-acomodo -->
 
-<div class="tabpanel" id="tab-carga">
+<div class="tabpanel active" id="tab-carga">
   <h1>Carga de Data a SharePoint</h1>
   <p class="lead">Sube el mismo excel crudo del biométrico — se filtra, se calcula Turno Efectivo/Semana/Facilitador/Líder, se valida contra duplicados por Llave, y se inserta solo lo nuevo en RegistrosBiometricos26.</p>
 
