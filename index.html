@@ -392,6 +392,37 @@
   }
   .hidden{ display:none !important; }
   .extra{ color: #b3413f; font-weight: 600; }
+
+  /* ===== Tabs de secciones ===== */
+  .tabbar{
+    display:flex; gap:6px; padding:14px 32px 0; background:var(--negro,#000);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .tabbtn{
+    background:none; border:none; color:rgba(255,255,255,.55);
+    padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer;
+    border-bottom:2px solid transparent; font-family:inherit;
+  }
+  .tabbtn.active{ color:#fff; border-bottom-color:var(--azul,#54a4b3); }
+  .tabpanel{ display:none; }
+  .tabpanel.active{ display:block; }
+
+  /* ===== Carga de Data ===== */
+  .cd-summary{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin:18px 0; }
+  .cd-box{ background:#f6f8f8; border:1px solid #dde3e4; border-radius:10px; padding:14px; text-align:center; }
+  .cd-box .n{ font-size:22px; font-weight:800; }
+  .cd-box .l{ font-size:11.5px; color:#636469; margin-top:2px; }
+  .cd-log{
+    background:#0d1117; color:#c9d1d9; font-family:'IBM Plex Mono',monospace;
+    font-size:12px; padding:14px; border-radius:8px; max-height:260px; overflow-y:auto;
+    white-space:pre-wrap; line-height:1.5;
+  }
+  .cd-btn{
+    background:var(--azul,#54a4b3); color:#fff; border:none; border-radius:8px;
+    padding:11px 22px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  .cd-btn:disabled{ opacity:.5; cursor:default; }
+  .cd-stub{ padding:60px 20px; text-align:center; color:#636469; }
 </style>
 </head>
 <body>
@@ -415,6 +446,15 @@
 </div>
 
 <main id="mainContent">
+
+<div class="tabbar" id="tabbar">
+  <button class="tabbtn active" data-tab="acomodo" type="button">Descargar Organizado</button>
+  <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
+  <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
+  <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
+</div>
+
+<div class="tabpanel active" id="tab-acomodo">
   <h1>Organizar registros de biométricos</h1>
   <p class="lead">Sube el excel crudo exportado del sistema de biométricos, aplica las reglas de acomodo por turno y descarga el archivo ya organizado por día.</p>
 
@@ -467,6 +507,49 @@
       </div>
     </div>
   </div>
+</div><!-- /tab-acomodo -->
+
+<div class="tabpanel" id="tab-carga">
+  <h1>Carga de Data a SharePoint</h1>
+  <p class="lead">Sube el mismo excel crudo del biométrico — se filtra, se calcula Turno Efectivo/Semana/Facilitador/Líder, se valida contra duplicados por Llave, y se inserta solo lo nuevo en RegistrosBiometricos26.</p>
+
+  <div class="steps">
+    <button class="step active" id="cdStep1" type="button"><span class="num">1</span>Subir excel</button>
+    <button class="ghost" id="cdResetBtn" type="button">Subir otro archivo</button>
+  </div>
+  <input type="file" id="cdFileInput" accept=".xlsx,.xls" class="hidden">
+  <div class="status-row">
+    <span class="filename" id="cdFilename"></span>
+    <span class="status" id="cdStatus"></span>
+  </div>
+
+  <div id="cdResultsBlock" class="card hidden">
+    <div class="cd-summary">
+      <div class="cd-box"><div class="n" id="cdLeidos">0</div><div class="l">Registros leídos</div></div>
+      <div class="cd-box"><div class="n" id="cdDescartados">0</div><div class="l">Descartados (no Almacén)</div></div>
+      <div class="cd-box"><div class="n" id="cdInsertados">0</div><div class="l">Insertados</div></div>
+      <div class="cd-box"><div class="n" id="cdDuplicados">0</div><div class="l">Duplicados (ya existían)</div></div>
+      <div class="cd-box"><div class="n" id="cdErrores">0</div><div class="l">Errores</div></div>
+    </div>
+    <button class="cd-btn" id="cdBtnSubir" type="button">Subir a SharePoint</button>
+    <div class="cd-log" id="cdLog" style="margin-top:14px;"></div>
+  </div>
+</div><!-- /tab-carga -->
+
+<div class="tabpanel" id="tab-dia">
+  <div class="cd-stub">
+    <h2>Registros por Día</h2>
+    <p>Próximamente — consulta de RegistrosBiometricos26 filtrada por fecha, con Entrada/Salida/Horas en CDM/Turno/Facilitador/Líder.</p>
+  </div>
+</div>
+
+<div class="tabpanel" id="tab-semana">
+  <div class="cd-stub">
+    <h2>Registros por Semana</h2>
+    <p>Próximamente — vista semanal con columnas por día y estatus A/D/F.</p>
+  </div>
+</div>
+
 </main>
 
 <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
@@ -854,6 +937,23 @@ function nombreCorto(account){
   return account.name || account.username;
 }
 
+// Token con permisos de SharePoint (Sites.ReadWrite.All) para la pestaña Carga de Data.
+// Distinto del token de login (User.Read) — se pide bajo demanda, no al inicio.
+async function obtenerTokenGraph(){
+  const account = msalInstance.getActiveAccount();
+  if (!account) throw new Error('No hay sesión activa.');
+  try {
+    const resp = await msalInstance.acquireTokenSilent({
+      scopes: ['Sites.ReadWrite.All'],
+      account,
+    });
+    return resp.accessToken;
+  } catch (e) {
+    const resp = await msalInstance.acquireTokenPopup({ scopes: ['Sites.ReadWrite.All'] });
+    return resp.accessToken;
+  }
+}
+
 function mostrarSesionActiva(account){
   document.getElementById('gate').style.display = 'none';
   document.getElementById('mainContent').classList.add('visible');
@@ -927,6 +1027,441 @@ async function initAuth(){
 }
 
 initAuth();
+
+/* ============================================================
+ * TABS
+ * ============================================================ */
+document.getElementById('tabbar').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tabbtn');
+  if (!btn) return;
+  document.querySelectorAll('.tabbtn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+});
+
+/* ============================================================
+ * CARGA DE DATA — config
+ * ============================================================ */
+const SP_HOST = 'ubictum.sharepoint.com';
+const SP_SITE_PATH = '/sites/U-Biometricos';
+const SP_LISTAS = {
+  registros: 'RegistrosBiometricos26',
+  catColab: 'CatColab',
+  catTurnos: 'CatTurnos',
+  log: 'Log',
+};
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+
+let cdGraphIds = null;     // { siteId, listIds: { registros, catColab, catTurnos, log } }
+let cdCatTurnos = null;    // array de filas de CatTurnos (parseadas a minutos)
+let cdCatColab = null;     // Map IDColab -> { facilitador, lider }
+
+function cdLog(msg){
+  const el = document.getElementById('cdLog');
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+async function graphFetch(url, token, options = {}){
+  const resp = await fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '');
+    throw new Error(`Graph ${resp.status} en ${url}: ${body.slice(0,300)}`);
+  }
+  return resp.status === 204 ? null : resp.json();
+}
+
+async function graphFetchAll(url, token){
+  let items = [];
+  let next = url;
+  while (next) {
+    const data = await graphFetch(next, token);
+    items = items.concat(data.value || []);
+    next = data['@odata.nextLink'] || null;
+  }
+  return items;
+}
+
+async function resolverGraphIds(token){
+  if (cdGraphIds) return cdGraphIds;
+  cdLog('Resolviendo sitio de SharePoint…');
+  const site = await graphFetch(`${GRAPH}/sites/${SP_HOST}:${SP_SITE_PATH}`, token);
+  const siteId = site.id;
+
+  cdLog('Buscando listas (RegistrosBiometricos26, CatColab, CatTurnos, Log)…');
+  const listas = await graphFetchAll(`${GRAPH}/sites/${siteId}/lists?$select=id,displayName`, token);
+  const listIds = {};
+  for (const key in SP_LISTAS) {
+    const found = listas.find(l => l.displayName === SP_LISTAS[key]);
+    if (!found) throw new Error(`No se encontró la lista "${SP_LISTAS[key]}" en el sitio.`);
+    listIds[key] = found.id;
+  }
+  cdGraphIds = { siteId, listIds };
+  return cdGraphIds;
+}
+
+/* ============================================================
+ * CATÁLOGOS (CatTurnos / CatColab) — se cargan una vez y se cachean
+ * ============================================================ */
+function hhmmAMin(hhmm){
+  if (!hhmm) return null;
+  const [h, m] = String(hhmm).split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+async function cargarCatalogos(token, ids){
+  if (cdCatTurnos && cdCatColab) return;
+
+  cdLog('Cargando CatTurnos…');
+  const turnosRaw = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catTurnos}/items?expand=fields&$top=200`, token
+  );
+  cdCatTurnos = turnosRaw.map(it => {
+    const f = it.fields;
+    return {
+      turno: f.Turno,
+      entMin: hhmmAMin(f.HorarioEnt),
+      salMin: hhmmAMin(f.HorarioSal || f.HorarioSalida),
+    };
+  }).filter(t => t.turno && t.entMin != null && t.salMin != null);
+
+  cdLog(`CatTurnos: ${cdCatTurnos.length} turnos cargados.`);
+
+  cdLog('Cargando CatColab…');
+  const colabRaw = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items?expand=fields&$top=500`, token
+  );
+  cdCatColab = new Map();
+  colabRaw.forEach(it => {
+    const f = it.fields;
+    if (f.IDColab) {
+      cdCatColab.set(String(f.IDColab).trim(), {
+        facilitador: f.Facilitador || '',
+        lider: f.Lider || '',
+      });
+    }
+  });
+  cdLog(`CatColab: ${cdCatColab.size} colaboradores cargados.`);
+}
+
+/* ============================================================
+ * PARSEO DEL EXCEL — regla posicional de Nivel 4-7
+ * ============================================================ */
+function parseGrupoCarga(grupo){
+  const partes = String(grupo || '').split('>').map(p => p.trim());
+  const idx = partes.findIndex(p => p === 'Almacén' || p === 'Almacen');
+  if (idx === -1) return null; // Nivel 4 no es Almacén -> se descarta
+  return {
+    grupo: partes[idx] || '',
+    turno: partes[idx + 1] || '',
+    area: partes[idx + 2] || '',
+    tipo: partes[idx + 3] || '',
+  };
+}
+
+function cdParaFechaStr(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function cdParaHoraStr(d){
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+}
+
+// Semana ISO 8601 + año ISO (para que un rango que cruza dic/ene quede agrupado correcto)
+function cdSemanaISO(d){
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (date.getUTCDay() + 6) % 7; // lunes=0 ... domingo=6
+  date.setUTCDate(date.getUTCDate() - dayNum + 3); // jueves de esa semana
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const semana = 1 + Math.round(((date - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return { semana: String(semana).padStart(2,'0'), year: String(date.getUTCFullYear()) };
+}
+
+/* ============================================================
+ * AGRUPACIÓN POR SESIÓN (turno-agnóstica)
+ * ------------------------------------------------------------
+ * En vez de asumir un horario fijo de corte (que solo funciona
+ * para nocturno), se agrupan los checados de cada colaborador
+ * en "sesiones de trabajo": una sesión termina cuando el hueco
+ * entre dos checados consecutivos supera GAP_HORAS (tiempo de
+ * descanso real entre turnos). Esto funciona igual para diurno,
+ * vespertino y nocturno sin tener que adivinar el turno primero.
+ * ============================================================ */
+const GAP_HORAS = 5;
+
+function agruparEnSesiones(registrosOrdenados){
+  const sesiones = [];
+  let actual = null;
+  registrosOrdenados.forEach(r => {
+    if (!actual) {
+      actual = { entrada: r.dt, salida: r.dt, registros: [r] };
+    } else {
+      const gapHoras = (r.dt - actual.salida) / 3600000;
+      if (gapHoras >= GAP_HORAS) {
+        sesiones.push(actual);
+        actual = { entrada: r.dt, salida: r.dt, registros: [r] };
+      } else {
+        actual.salida = r.dt;
+        actual.registros.push(r);
+      }
+    }
+  });
+  if (actual) sesiones.push(actual);
+  return sesiones;
+}
+
+function calcularTurnoEfectivo(entrada, salida){
+  if (!cdCatTurnos || !cdCatTurnos.length) return '';
+  const entMin = entrada.getHours() * 60 + entrada.getMinutes();
+  const cruzaMedianoche = salida.toDateString() !== entrada.toDateString();
+
+  for (const t of cdCatTurnos) {
+    const nocturnoDelCatalogo = t.salMin < t.entMin; // cruza medianoche en el catálogo
+    if (nocturnoDelCatalogo !== cruzaMedianoche) continue; // familia distinta, no aplica
+    const tolerancia = 90; // minutos de tolerancia sobre la hora de entrada esperada
+    if (Math.abs(entMin - t.entMin) <= tolerancia) return t.turno;
+  }
+  // sin match dentro de tolerancia: se queda con el turno cuyo HorarioEnt esté más cerca
+  let mejor = null, mejorDif = Infinity;
+  cdCatTurnos.forEach(t => {
+    if ((t.salMin < t.entMin) !== cruzaMedianoche) return;
+    const dif = Math.abs(entMin - t.entMin);
+    if (dif < mejorDif) { mejorDif = dif; mejor = t.turno; }
+  });
+  return mejor || '';
+}
+
+/* ============================================================
+ * LECTURA DEL EXCEL PARA CARGA DE DATA
+ * ============================================================ */
+function leerExcelCarga(wb){
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+  const headerIdx = rows.findIndex(r => r && r[0] === 'Nombre de archivo');
+  if (headerIdx === -1) throw new Error('No se encontró el encabezado esperado en el excel.');
+  const dataRows = rows.slice(headerIdx + 1);
+
+  let leidos = 0, descartados = 0;
+  const porColab = new Map(); // idColab -> [registros crudos]
+
+  dataRows.forEach(r => {
+    if (!r || r.length === 0 || r[1] == null) return;
+    leidos++;
+    const tipoPersona = r[6];
+    if (tipoPersona !== 'Persona') { descartados++; return; }
+
+    const nivel = parseGrupoCarga(r[7]);
+    if (!nivel) { descartados++; return; }
+
+    const dt = parseFechaHora(r[8]);
+    if (!dt) { descartados++; return; }
+
+    const idColab = String(r[1] ?? '').trim();
+    const rec = {
+      idColab,
+      nombre: String(r[0] ?? '').trim(),
+      grupo: nivel.grupo,
+      turnoAsignado: nivel.turno,
+      area: nivel.area,
+      tipoColab: nivel.tipo,
+      biometrico: String(r[9] ?? '').trim(),
+      dt,
+    };
+    if (!porColab.has(idColab)) porColab.set(idColab, []);
+    porColab.get(idColab).push(rec);
+  });
+
+  return { porColab, leidos, descartados };
+}
+
+function construirRegistrosParaSubir(porColab){
+  const salida = [];
+  porColab.forEach((registros, idColab) => {
+    const ordenados = registros.slice().sort((a,b) => a.dt - b.dt);
+    const sesiones = agruparEnSesiones(ordenados);
+    sesiones.forEach(sesion => {
+      const turnoEfectivo = calcularTurnoEfectivo(sesion.entrada, sesion.salida);
+      const catColabInfo = cdCatColab.get(idColab) || { facilitador: '', lider: '' };
+      sesion.registros.forEach(r => {
+        const fechaStr = cdParaFechaStr(r.dt);
+        const horaStr = cdParaHoraStr(r.dt);
+        const { semana, year } = cdSemanaISO(r.dt);
+        const llave = `${r.idColab}_${fechaStr}_${horaStr}`;
+        salida.push({
+          IDColab: r.idColab,
+          Nombre: r.nombre,
+          Grupo: r.grupo,
+          TurnoAsignado: r.turnoAsignado,
+          TurnoEfectivo: turnoEfectivo,
+          Area: r.area,
+          TipoColab: r.tipoColab,
+          Fecha: fechaStr,
+          Hora: horaStr,
+          Semana: semana,
+          YearSemana: year,
+          Biometrico: r.biometrico,
+          Llave: llave,
+          Facilitador: catColabInfo.facilitador,
+          Lider: catColabInfo.lider,
+        });
+      });
+    });
+  });
+  return salida;
+}
+
+/* ============================================================
+ * DEDUPLICACIÓN + INSERCIÓN POR LOTES
+ * ============================================================ */
+async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax){
+  cdLog(`Buscando registros ya existentes entre ${fechaMin} y ${fechaMax}…`);
+  const filtro = encodeURIComponent(`fields/Fecha ge '${fechaMin}' and fields/Fecha le '${fechaMax}'`);
+  const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?expand=fields(select=Llave)&$filter=${filtro}&$top=2000`;
+  const items = await graphFetchAll(url, token);
+  const set = new Set(items.map(it => it.fields.Llave));
+  cdLog(`Ya existían ${set.size} registros en ese rango.`);
+  return set;
+}
+
+async function insertarRegistrosEnLotes(token, ids, registros){
+  let insertados = 0, errores = 0;
+  const TAM_LOTE = 20;
+  for (let i = 0; i < registros.length; i += TAM_LOTE) {
+    const lote = registros.slice(i, i + TAM_LOTE);
+    const body = {
+      requests: lote.map((reg, j) => ({
+        id: String(j + 1),
+        method: 'POST',
+        url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items`,
+        headers: { 'Content-Type': 'application/json' },
+        body: { fields: reg },
+      })),
+    };
+    try {
+      const resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
+      resp.responses.forEach(r => {
+        if (r.status >= 200 && r.status < 300) insertados++;
+        else errores++;
+      });
+    } catch (e) {
+      errores += lote.length;
+      cdLog('Error en lote: ' + e.message);
+    }
+    cdLog(`Progreso: ${Math.min(i + TAM_LOTE, registros.length)}/${registros.length}`);
+  }
+  return { insertados, errores };
+}
+
+async function escribirLogCarga(token, ids, resumen){
+  const body = {
+    fields: {
+      Title: resumen.nombreArchivo,
+      RangoFechas: `${resumen.fechaMin} a ${resumen.fechaMax}`,
+      RegLeidos: resumen.leidos,
+      RegInsertados: resumen.insertados,
+      RegDuplicados: resumen.duplicados,
+      RegDescartados: resumen.descartados,
+      Resultado: resumen.errores > 0 ? 'Error parcial' : 'Éxito',
+    },
+  };
+  await graphFetch(`${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.log}/items`, token, {
+    method: 'POST', body: JSON.stringify(body),
+  });
+}
+
+/* ============================================================
+ * ORQUESTACIÓN — pestaña Carga de Data
+ * ============================================================ */
+let cdWorkbook = null;
+let cdArchivoNombre = '';
+
+document.getElementById('cdFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  cdArchivoNombre = file.name;
+  document.getElementById('cdFilename').textContent = file.name;
+  document.getElementById('cdStatus').textContent = 'Leyendo…';
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    cdWorkbook = XLSX.read(ev.target.result, { type: 'array', cellDates: false });
+    document.getElementById('cdStatus').textContent = 'Archivo cargado. Listo para subir.';
+    document.getElementById('cdResultsBlock').classList.remove('hidden');
+    document.getElementById('cdLog').textContent = '';
+    ['cdLeidos','cdDescartados','cdInsertados','cdDuplicados','cdErrores'].forEach(id => document.getElementById(id).textContent = '0');
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+document.getElementById('cdResetBtn').addEventListener('click', () => {
+  cdWorkbook = null;
+  document.getElementById('cdFileInput').value = '';
+  document.getElementById('cdFilename').textContent = '';
+  document.getElementById('cdStatus').textContent = '';
+  document.getElementById('cdResultsBlock').classList.add('hidden');
+});
+
+document.getElementById('cdBtnSubir').addEventListener('click', async () => {
+  if (!cdWorkbook) return;
+  const btn = document.getElementById('cdBtnSubir');
+  btn.disabled = true;
+  document.getElementById('cdLog').textContent = '';
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+    await cargarCatalogos(token, ids);
+
+    cdLog('Leyendo excel…');
+    const { porColab, leidos, descartados } = leerExcelCarga(cdWorkbook);
+    document.getElementById('cdLeidos').textContent = leidos;
+    document.getElementById('cdDescartados').textContent = descartados;
+
+    cdLog('Calculando Turno Efectivo, Semana, Llave, Facilitador/Líder…');
+    const registros = construirRegistrosParaSubir(porColab);
+
+    if (!registros.length) {
+      cdLog('No hay registros válidos para subir.');
+      return;
+    }
+
+    const fechas = registros.map(r => r.Fecha).sort();
+    const fechaMin = fechas[0], fechaMax = fechas[fechas.length - 1];
+
+    const llavesExistentes = await buscarLlavesExistentes(token, ids, fechaMin, fechaMax);
+    const nuevos = registros.filter(r => !llavesExistentes.has(r.Llave));
+    const duplicados = registros.length - nuevos.length;
+    document.getElementById('cdDuplicados').textContent = duplicados;
+    cdLog(`${nuevos.length} registros nuevos por insertar (${duplicados} ya existían).`);
+
+    let insertados = 0, errores = 0;
+    if (nuevos.length) {
+      cdLog('Insertando en RegistrosBiometricos26…');
+      const res = await insertarRegistrosEnLotes(token, ids, nuevos);
+      insertados = res.insertados; errores = res.errores;
+    }
+    document.getElementById('cdInsertados').textContent = insertados;
+    document.getElementById('cdErrores').textContent = errores;
+
+    await escribirLogCarga(token, ids, {
+      nombreArchivo: cdArchivoNombre, fechaMin, fechaMax,
+      leidos, insertados, duplicados, descartados, errores,
+    });
+
+    cdLog(`Listo. ${insertados} insertados, ${duplicados} duplicados, ${errores} errores.`);
+  } catch (err) {
+    console.error(err);
+    cdLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
 </script>
 
 </body>
