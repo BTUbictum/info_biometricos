@@ -1383,6 +1383,7 @@ async function escribirLogCarga(token, ids, resumen){
 let cdWorkbook = null;
 let cdArchivoNombre = '';
 
+document.getElementById('cdStep1').addEventListener('click', () => document.getElementById('cdFileInput').click());
 document.getElementById('cdFileInput').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
