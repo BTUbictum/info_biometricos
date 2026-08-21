@@ -1079,11 +1079,11 @@ async function graphFetch(url, token, options = {}){
   return resp.status === 204 ? null : resp.json();
 }
 
-async function graphFetchAll(url, token){
+async function graphFetchAll(url, token, options = {}){
   let items = [];
   let next = url;
   while (next) {
-    const data = await graphFetch(next, token);
+    const data = await graphFetch(next, token, options);
     items = items.concat(data.value || []);
     next = data['@odata.nextLink'] || null;
   }
@@ -1125,6 +1125,11 @@ async function cargarCatalogos(token, ids){
   const turnosRaw = await graphFetchAll(
     `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catTurnos}/items?expand=fields&$top=200`, token
   );
+  if (turnosRaw.length) {
+    cdLog('DIAGNÓSTICO CatTurnos — nombres internos reales de los campos: ' + Object.keys(turnosRaw[0].fields).join(', '));
+  } else {
+    cdLog('DIAGNÓSTICO CatTurnos — la lista devolvió 0 renglones (¿lista vacía o sin acceso?).');
+  }
   cdCatTurnos = turnosRaw.map(it => {
     const f = it.fields;
     return {
@@ -1140,6 +1145,11 @@ async function cargarCatalogos(token, ids){
   const colabRaw = await graphFetchAll(
     `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items?expand=fields&$top=500`, token
   );
+  if (colabRaw.length) {
+    cdLog('DIAGNÓSTICO CatColab — nombres internos reales de los campos: ' + Object.keys(colabRaw[0].fields).join(', '));
+  } else {
+    cdLog('DIAGNÓSTICO CatColab — la lista devolvió 0 renglones (¿lista vacía o sin acceso?).');
+  }
   cdCatColab = new Map();
   colabRaw.forEach(it => {
     const f = it.fields;
@@ -1325,7 +1335,7 @@ async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax){
   cdLog(`Buscando registros ya existentes entre ${fechaMin} y ${fechaMax}…`);
   const filtro = encodeURIComponent(`fields/Fecha ge '${fechaMin}' and fields/Fecha le '${fechaMax}'`);
   const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?expand=fields(select=Llave)&$filter=${filtro}&$top=2000`;
-  const items = await graphFetchAll(url, token);
+  const items = await graphFetchAll(url, token, { headers: { 'Prefer': 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
   const set = new Set(items.map(it => it.fields.Llave));
   cdLog(`Ya existían ${set.size} registros en ese rango.`);
   return set;
