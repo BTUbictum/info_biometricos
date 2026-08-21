@@ -1121,21 +1121,34 @@ function hhmmAMin(hhmm){
 async function cargarCatalogos(token, ids){
   if (cdCatTurnos && cdCatColab) return;
 
+  // Diagnóstico definitivo: nombre interno real (StaticName) vs nombre visible
+  // en pantalla, directo desde la definición de columnas — no adivinado por
+  // los datos, porque SharePoint conserva el nombre interno original aunque
+  // se renombre la columna después.
+  const colsTurnos = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catTurnos}/columns?$select=name,displayName`, token
+  );
+  cdLog('DIAGNÓSTICO CatTurnos — columnas (nombre interno = nombre visible): ' +
+    colsTurnos.filter(c => !c.name.startsWith('_') && !['ContentType','Attachments','Edit'].includes(c.name))
+      .map(c => `${c.name}${c.name !== c.displayName ? ' (visible: "' + c.displayName + '")' : ''}`).join(', '));
+
+  // Mapa nombre visible -> nombre interno real, para no depender de adivinar
+  const mapaTurnos = {};
+  colsTurnos.forEach(c => { mapaTurnos[c.displayName] = c.name; });
+  const campoTurno = mapaTurnos['Turno'] || 'Turno';
+  const campoHorarioEnt = mapaTurnos['HorarioEnt'] || 'HorarioEnt';
+  const campoHorarioSal = mapaTurnos['HorarioSal'] || mapaTurnos['HorarioSalida'] || 'HorarioSal';
+
   cdLog('Cargando CatTurnos…');
   const turnosRaw = await graphFetchAll(
     `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catTurnos}/items?expand=fields&$top=200`, token
   );
-  if (turnosRaw.length) {
-    cdLog('DIAGNÓSTICO CatTurnos — nombres internos reales de los campos: ' + Object.keys(turnosRaw[0].fields).join(', '));
-  } else {
-    cdLog('DIAGNÓSTICO CatTurnos — la lista devolvió 0 renglones (¿lista vacía o sin acceso?).');
-  }
   cdCatTurnos = turnosRaw.map(it => {
     const f = it.fields;
     return {
-      turno: f.Turno,
-      entMin: hhmmAMin(f.HorarioEnt),
-      salMin: hhmmAMin(f.HorarioSal || f.HorarioSalida),
+      turno: f[campoTurno],
+      entMin: hhmmAMin(f[campoHorarioEnt]),
+      salMin: hhmmAMin(f[campoHorarioSal]),
     };
   }).filter(t => t.turno && t.entMin != null && t.salMin != null);
 
@@ -1313,7 +1326,7 @@ function construirRegistrosParaSubir(porColab){
           TurnoEfectivo: turnoEfectivo,
           Area: r.area,
           TipoColab: r.tipoColab,
-          Fecha: fechaStr,
+          Fecha: fechaStr + 'T00:00:00Z',
           Hora: horaStr,
           Semana: semana,
           YearSemana: year,
@@ -1357,10 +1370,18 @@ async function insertarRegistrosEnLotes(token, ids, registros){
     };
     try {
       const resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
+      let primerErrorDelLote = null;
       resp.responses.forEach(r => {
-        if (r.status >= 200 && r.status < 300) insertados++;
-        else errores++;
+        if (r.status >= 200 && r.status < 300) {
+          insertados++;
+        } else {
+          errores++;
+          if (!primerErrorDelLote) primerErrorDelLote = r;
+        }
       });
+      if (primerErrorDelLote) {
+        cdLog('Detalle del error (renglón ' + primerErrorDelLote.id + '): ' + JSON.stringify(primerErrorDelLote.body || primerErrorDelLote));
+      }
     } catch (e) {
       errores += lote.length;
       cdLog('Error en lote: ' + e.message);
