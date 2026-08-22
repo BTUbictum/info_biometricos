@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v22]</title>
+<title>Biométricos Colaboradores | Ubictum [v23]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -423,6 +423,23 @@
   }
   .cd-btn:disabled{ opacity:.5; cursor:default; }
   .cd-stub{ padding:60px 20px; text-align:center; color:#636469; }
+
+  /* ===== Pestaña Registros ===== */
+  .reg-filtros{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
+    gap:14px;
+    margin:18px 0 8px;
+    align-items:end;
+  }
+  .reg-campo{ display:flex; flex-direction:column; gap:5px; }
+  .reg-campo label{ font-size:11.5px; font-weight:600; color:#636469; }
+  .reg-campo input, .reg-campo select{
+    padding:9px 10px; border:1px solid #dde3e4; border-radius:7px;
+    font-size:13.5px; font-family:'Inter', sans-serif; background:#fff;
+  }
+  .reg-botones{ flex-direction:row; gap:8px; }
+  .reg-botones .cd-btn{ padding:9px 18px; font-size:13.5px; }
 </style>
 </head>
 <body>
@@ -448,69 +465,81 @@
 <main id="mainContent">
 
 <div class="tabbar" id="tabbar">
+  <button class="tabbtn active" data-tab="registros" type="button">Registros</button>
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
-  <button class="tabbtn active" data-tab="carga" type="button">Carga de Data</button>
-  <button class="tabbtn" data-tab="acomodo" type="button">Descargar Organizado</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v22</span>
+  <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v23</span>
 </div>
 
-<div class="tabpanel" id="tab-acomodo">
-  <h1>Organizar registros de biométricos</h1>
-  <p class="lead">Sube el excel crudo exportado del sistema de biométricos, aplica las reglas de acomodo por turno y descarga el archivo ya organizado por día.</p>
+<div class="tabpanel active" id="tab-registros">
+  <h1>Registros</h1>
+  <p class="lead">Consulta directa sobre RegBio26 — al abrir muestra la fecha más reciente cargada.</p>
 
-  <div class="steps">
-    <button class="step active" id="step1" type="button"><span class="num">1</span>Subir excel</button>
-    <button class="step" id="step2" type="button" disabled><span class="num">2</span>Generar archivo</button>
-    <button class="step" id="step3" type="button" disabled><span class="num">3</span>Descargar</button>
-    <button class="ghost" id="resetBtn" type="button">Subir otro archivo</button>
-  </div>
-  <input type="file" id="fileInput" accept=".xlsx,.xls" class="hidden">
-  <div class="status-row">
-    <span class="filename" id="filename"></span>
-    <span class="status" id="status"></span>
-  </div>
-
-  <div id="resultsBlock" class="card hidden">
-    <div class="results-layout">
-      <div class="stats-sidebar">
-        <div class="box"><div class="n" id="sumFilas">0</div><div class="l">Filas generadas</div></div>
-        <div class="box"><div class="n" id="sumColab">0</div><div class="l">Colaboradores</div></div>
-        <div class="box"><div class="n" id="sumOrigen">0</div><div class="l">Registros leídos</div></div>
-        <div class="box"><div class="n" id="sumOmitidos">0</div><div class="l">Registros omitidos</div></div>
-      </div>
-
-      <div class="results-main">
-        <div class="filters">
-          <input type="text" id="filtroId" placeholder="Filtrar por ID">
-          <input type="text" id="filtroNombre" placeholder="Filtrar por Nombre">
-          <select id="filtroArea"><option value="">Todas las áreas</option></select>
-          <select id="filtroTurno">
-            <option value="">Todos los turnos</option>
-            <option value="Matutino">Matutino</option>
-            <option value="Vespertino">Vespertino</option>
-            <option value="Nocturno">Nocturno</option>
-          </select>
-        </div>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th><th>Nombre</th><th>Área</th><th>Turno</th><th>Fecha</th>
-                <th>Hora Entrada</th><th>Hora Salida</th><th>Horas Estancia</th><th>Tiempo Extra</th>
-              </tr>
-            </thead>
-            <tbody id="tbody"></tbody>
-          </table>
-        </div>
-        <p class="table-note" id="tableNote">Vista previa. El archivo descargado incluye el total.</p>
-      </div>
+  <div class="reg-filtros">
+    <div class="reg-campo">
+      <label>Fecha desde</label>
+      <input type="date" id="regFechaDesde">
+    </div>
+    <div class="reg-campo">
+      <label>Fecha hasta</label>
+      <input type="date" id="regFechaHasta">
+    </div>
+    <div class="reg-campo">
+      <label>ID Colaborador</label>
+      <input type="text" id="regFiltroId" placeholder="Ej. 100357">
+    </div>
+    <div class="reg-campo">
+      <label>Nombre</label>
+      <input type="text" id="regFiltroNombre" placeholder="Buscar por nombre">
+    </div>
+    <div class="reg-campo">
+      <label>Turno</label>
+      <select id="regFiltroTurno"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Área</label>
+      <select id="regFiltroArea"><option value="">Todas</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Biométrico</label>
+      <select id="regFiltroBiometrico"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Facilitador</label>
+      <select id="regFiltroFacilitador"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Líder</label>
+      <select id="regFiltroLider"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo reg-botones">
+      <button class="cd-btn" id="regBtnBuscar" type="button">Buscar</button>
+      <button class="ghost" id="regBtnLimpiar" type="button">Limpiar filtros</button>
     </div>
   </div>
-</div><!-- /tab-acomodo -->
 
-<div class="tabpanel active" id="tab-carga">
+  <div class="status-row">
+    <span class="status" id="regStatus"></span>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
+            <th>Biométrico</th><th>Fecha</th><th>Hora</th><th>Facilitador</th><th>Líder</th>
+          </tr>
+        </thead>
+        <tbody id="regTbody"></tbody>
+      </table>
+    </div>
+    <p class="table-note" id="regTableNote"></p>
+  </div>
+</div><!-- /tab-registros -->
+
+<div class="tabpanel" id="tab-carga">
   <h1>Carga de Data a SharePoint</h1>
   <p class="lead">Sube el mismo excel crudo del biométrico — se filtra, se calcula Turno Efectivo/Semana/Facilitador/Líder, se valida contra duplicados por Llave, y se inserta solo lo nuevo en RegBio26.</p>
 
@@ -562,261 +591,6 @@
 
 <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
 <script>
-const fileInput = document.getElementById('fileInput');
-const filenameEl = document.getElementById('filename');
-const resetBtn = document.getElementById('resetBtn');
-const statusEl = document.getElementById('status');
-const resultsBlock = document.getElementById('resultsBlock');
-const tbody = document.getElementById('tbody');
-const filtroId = document.getElementById('filtroId');
-const filtroNombre = document.getElementById('filtroNombre');
-const filtroArea = document.getElementById('filtroArea');
-const filtroTurno = document.getElementById('filtroTurno');
-const tableNote = document.getElementById('tableNote');
-const step1 = document.getElementById('step1');
-const step2 = document.getElementById('step2');
-const step3 = document.getElementById('step3');
-
-let selectedFile = null;
-let outputRows = null; // final computed rows, kept for download
-
-step1.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => {
-  if (e.target.files.length) handleFile(e.target.files[0]);
-});
-
-function handleFile(file){
-  selectedFile = file;
-  filenameEl.textContent = file.name;
-  statusEl.textContent = '';
-  statusEl.className = 'status';
-  resultsBlock.classList.add('hidden');
-  step1.classList.add('done');
-  step2.classList.add('active');
-  step2.disabled = false;
-  step3.classList.remove('active','done');
-  step3.disabled = true;
-}
-
-function resetTool(){
-  selectedFile = null;
-  outputRows = null;
-  fileInput.value = '';
-  filenameEl.textContent = '';
-  statusEl.textContent = '';
-  statusEl.className = 'status';
-  resultsBlock.classList.add('hidden');
-  tbody.innerHTML = '';
-  filtroId.value = '';
-  filtroNombre.value = '';
-  filtroTurno.value = '';
-  filtroArea.innerHTML = '<option value="">Todas las áreas</option>';
-  step1.classList.remove('done');
-  step1.classList.add('active');
-  step2.classList.remove('active','done');
-  step2.disabled = true;
-  step3.classList.remove('active','done');
-  step3.disabled = true;
-}
-resetBtn.addEventListener('click', resetTool);
-
-step2.addEventListener('click', () => {
-  if (!selectedFile) return;
-  statusEl.textContent = 'Procesando…';
-  statusEl.className = 'status';
-  step2.disabled = true;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: 'array', cellDates: false });
-      const result = procesarArchivo(wb);
-      outputRows = result.rows;
-      pintarResultados(result);
-      statusEl.textContent = 'Listo.';
-      step2.classList.add('done');
-      step3.classList.add('active');
-      step3.disabled = false;
-    } catch (err) {
-      console.error(err);
-      statusEl.textContent = 'Error al procesar el archivo: ' + err.message;
-      statusEl.className = 'status error';
-    } finally {
-      step2.disabled = false;
-    }
-  };
-  reader.readAsArrayBuffer(selectedFile);
-});
-
-step3.addEventListener('click', () => {
-  if (!outputRows) return;
-  const exportRows = outputRows.map(({_revisar, ...rest}) => rest);
-  const ws = XLSX.utils.json_to_sheet(exportRows);
-  ws['!cols'] = [
-    {wch:10},{wch:32},{wch:16},{wch:12},{wch:12},{wch:12},{wch:12},{wch:14},{wch:12}
-  ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Asistencias por día');
-  const hoy = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `Biometricos_Organizado_${hoy}.xlsx`);
-  step3.classList.add('done');
-});
-
-// ---------- Lógica de negocio ----------
-
-function procesarArchivo(wb){
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
-
-  // localizar fila de encabezados: primera celda == 'Nombre de archivo'
-  let headerIdx = rows.findIndex(r => r && r[0] === 'Nombre de archivo');
-  if (headerIdx === -1) throw new Error('No se encontró el encabezado esperado en el excel.');
-
-  const dataRows = rows.slice(headerIdx + 1);
-
-  let leidos = 0;
-  let omitidos = 0;
-
-  // records: array de {id, nombre, area, turno, dt}
-  const records = [];
-
-  dataRows.forEach(r => {
-    if (!r || r.length === 0 || r[1] == null) return;
-    leidos++;
-    const nombre = String(r[0] ?? '').trim();
-    const id = String(r[1] ?? '').trim();
-    const tipoPersona = r[6];
-    const grupo = String(r[7] ?? '');
-    const tiempoRaw = r[8];
-
-    if (tipoPersona !== 'Persona') { omitidos++; return; }
-
-    const partes = grupo.split('>').map(p => p.trim());
-    const idxAlmacen = partes.findIndex(p => p === 'Almacén' || p === 'Almacen');
-    if (idxAlmacen === -1 || idxAlmacen + 2 >= partes.length) { omitidos++; return; }
-
-    const turnoTexto = partes[idxAlmacen + 1];
-    const area = partes[idxAlmacen + 2];
-
-    let turno = null;
-    if (/diurno/i.test(turnoTexto)) turno = 'Matutino';
-    else if (/vespertino/i.test(turnoTexto)) turno = 'Vespertino';
-    else if (/nocturno/i.test(turnoTexto)) turno = 'Nocturno';
-    if (!turno) { omitidos++; return; }
-
-    const dt = parseFechaHora(tiempoRaw);
-    if (!dt) { omitidos++; return; }
-
-    records.push({ id, nombre, area, turno, dt });
-  });
-
-  // agrupar por ID + turno
-  const grupos = new Map(); // key: id|turno -> {nombre, area(mas comun), byDate: Map(dateStr -> records[])}
-  records.forEach(rec => {
-    const key = rec.id + '|' + rec.turno;
-    if (!grupos.has(key)) {
-      grupos.set(key, { id: rec.id, nombre: rec.nombre, turno: rec.turno, byDate: new Map(), areaCount: new Map() });
-    }
-    const g = grupos.get(key);
-    const dateStr = toDateStr(rec.dt);
-    if (!g.byDate.has(dateStr)) g.byDate.set(dateStr, []);
-    g.byDate.get(dateStr).push(rec);
-    g.areaCount.set(rec.area, (g.areaCount.get(rec.area) || 0) + 1);
-  });
-
-  const outRows = [];
-
-  grupos.forEach(g => {
-    const areaFinal = [...g.areaCount.entries()].sort((a,b) => b[1]-a[1])[0][0];
-    const dates = [...g.byDate.keys()].sort();
-
-    if (g.turno === 'Nocturno') {
-      // Puede haber N registros en un mismo día (rebotes de biométrico, cierres duplicados, etc.),
-      // así que no basta con emparejar consecutivos. Se separa cada día en dos ventanas:
-      // "cierre" (antes de las 10:00, son salidas de la jornada de la noche anterior) y
-      // "entrada" (10:00 en adelante, es el inicio de la jornada de esa noche).
-      // Entrada = primer registro del día en la ventana de entrada (>=10:00).
-      // Salida = último registro del día siguiente en la ventana de cierre (<10:00).
-      dates.forEach(dateStr => {
-        const dayRecs = g.byDate.get(dateStr).slice().sort((a,b) => a.dt - b.dt);
-        const entradaRecs = dayRecs.filter(r => r.dt.getHours() >= 10);
-        if (entradaRecs.length === 0) return; // este día solo trae cierre, no inicia turno
-        const entrada = entradaRecs[0].dt;
-
-        const nextDateStr = toDateStr(addDays(parseDateStr(dateStr), 1));
-        const nextDayRecs = (g.byDate.get(nextDateStr) || []).slice().sort((a,b) => a.dt - b.dt);
-        const cierreRecs = nextDayRecs.filter(r => r.dt.getHours() < 10);
-        const salida = cierreRecs.length ? cierreRecs[cierreRecs.length - 1].dt : null;
-
-        outRows.push(construirFila(g, areaFinal, dateStr, entrada, salida, salida ? 2 : 1));
-      });
-    } else {
-      dates.forEach(dateStr => {
-        const dayRecs = g.byDate.get(dateStr).slice().sort((a,b) => a.dt - b.dt);
-        const entrada = dayRecs[0].dt;
-        const salida = dayRecs.length === 1 ? dayRecs[0].dt : dayRecs[dayRecs.length - 1].dt;
-        outRows.push(construirFila(g, areaFinal, dateStr, entrada, salida, dayRecs.length));
-      });
-    }
-  });
-
-  outRows.sort((a,b) =>
-    a.Area.localeCompare(b.Area) ||
-    a.Turno.localeCompare(b.Turno) ||
-    a.ID.localeCompare(b.ID) ||
-    a.Fecha.localeCompare(b.Fecha)
-  );
-
-  return {
-    rows: outRows,
-    leidos,
-    omitidos,
-    colaboradores: new Set(records.map(r => r.id)).size
-  };
-}
-
-function construirFila(g, area, fechaAnclaStr, entrada, salida, numRegistrosDia){
-  const soloUnRegistro = numRegistrosDia === 1;
-  const sinSalida = !salida;
-
-  let horasEstancia = '-';
-  let tiempoExtra = '-';
-  let horaEntradaTxt = formatHora(entrada);
-  let horaSalidaTxt = sinSalida ? '-' : formatHora(salida);
-
-  if (!sinSalida) {
-    const horasDec = (salida - entrada) / 3600000;
-    horasEstancia = formatDuracion(horasDec);
-
-    const fechaAncla = parseDateStr(fechaAnclaStr);
-    const weekday = fechaAncla.getDay(); // 0=domingo,6=sabado
-
-    let base;
-    if (g.turno === 'Nocturno') {
-      base = (weekday === 6) ? 0 : 7; // sábado (entra el sábado en la noche) = todo extra
-    } else {
-      if (weekday === 0) base = 0; // domingo = todo extra
-      else if (g.turno === 'Matutino') base = 8;
-      else base = (weekday === 6) ? 5 : 8; // Vespertino
-    }
-    const extraDec = Math.max(0, horasDec - base);
-    tiempoExtra = redondearHoraExtra(extraDec);
-  }
-
-  return {
-    ID: g.id,
-    Nombre: g.nombre,
-    Area: area,
-    Turno: g.turno,
-    Fecha: fechaAnclaStr,
-    'Hora Entrada': horaEntradaTxt,
-    'Hora Salida': horaSalidaTxt,
-    'Horas Estancia': horasEstancia,
-    'Tiempo Extra': tiempoExtra,
-    _revisar: soloUnRegistro
-  };
-}
-
 function parseFechaHora(v){
   if (v == null) return null;
   if (typeof v === 'string') {
@@ -830,99 +604,6 @@ function parseFechaHora(v){
   }
   return null;
 }
-function toDateStr(d){
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-function parseDateStr(s){
-  const [y,m,d] = s.split('-').map(Number);
-  return new Date(y, m-1, d);
-}
-function addDays(d, n){
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-function formatHora(d){
-  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
-}
-function formatDuracion(horasDec){
-  const totalMin = Math.round(horasDec * 60);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-}
-function redondearHoraExtra(horasDec){
-  // Regla: si los minutos de la fracción son > 30, sube a la siguiente hora.
-  // Si son <= 30, baja (se descartan). Ej: 1:31 -> 2:00, 0:40 -> 1:00, 1:30 -> 1:00, 0:28 -> 0:00
-  const totalMin = horasDec * 60;
-  const horas = Math.floor(totalMin / 60);
-  const minutosResto = totalMin - horas * 60;
-  const horasRedondeadas = minutosResto > 30 ? horas + 1 : horas;
-  return String(horasRedondeadas).padStart(2,'0') + ':00';
-}
-
-// ---------- Render y descarga ----------
-
-function pintarResultados(result){
-  document.getElementById('sumFilas').textContent = result.rows.length;
-  document.getElementById('sumColab').textContent = result.colaboradores;
-  document.getElementById('sumOrigen').textContent = result.leidos;
-  document.getElementById('sumOmitidos').textContent = result.omitidos;
-
-  filtroId.value = '';
-  filtroNombre.value = '';
-  filtroTurno.value = '';
-  const areas = [...new Set(result.rows.map(r => r.Area))].sort();
-  filtroArea.innerHTML = '<option value="">Todas las áreas</option>' +
-    areas.map(a => `<option value="${a}">${a}</option>`).join('');
-  filtroArea.value = '';
-
-  renderTabla();
-  resultsBlock.classList.remove('hidden');
-}
-
-function renderTabla(){
-  if (!outputRows) return;
-  const idQ = filtroId.value.trim().toLowerCase();
-  const nombreQ = filtroNombre.value.trim().toLowerCase();
-  const areaQ = filtroArea.value;
-  const turnoQ = filtroTurno.value;
-
-  const filtradas = outputRows.filter(r =>
-    (!idQ || r.ID.toLowerCase().includes(idQ)) &&
-    (!nombreQ || r.Nombre.toLowerCase().includes(nombreQ)) &&
-    (!areaQ || r.Area === areaQ) &&
-    (!turnoQ || r.Turno === turnoQ)
-  );
-
-  const LIMITE_VISTA = 5000; // tope de seguridad para no congelar el navegador con archivos muy grandes
-
-  tbody.innerHTML = '';
-  filtradas.slice(0, LIMITE_VISTA).forEach(r => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.ID}</td>
-      <td>${r.Nombre}</td>
-      <td>${r.Area}</td>
-      <td>${r.Turno}</td>
-      <td>${r.Fecha}</td>
-      <td>${r['Hora Entrada']}</td>
-      <td>${r['Hora Salida']}</td>
-      <td>${r['Horas Estancia']}</td>
-      <td class="${parseFloat(r['Tiempo Extra']) > 0 ? 'extra' : ''}">${r['Tiempo Extra']}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-
-  const hayFiltro = idQ || nombreQ || areaQ || turnoQ;
-  tableNote.textContent = hayFiltro
-    ? `${filtradas.length} fila(s) cumplen el filtro${filtradas.length > LIMITE_VISTA ? ` (mostrando las primeras ${LIMITE_VISTA})` : ''}. El archivo descargado incluye el total sin filtrar (${outputRows.length}).`
-    : `Mostrando ${Math.min(LIMITE_VISTA, outputRows.length)} de ${outputRows.length} filas.`;
-}
-
-[filtroId, filtroNombre].forEach(el => el.addEventListener('input', renderTabla));
-[filtroArea, filtroTurno].forEach(el => el.addEventListener('change', renderTabla));
-
 /* ============================================================
  * AUTENTICACIÓN — MSAL.js contra U-Biometricos (Entra ID)
  * ------------------------------------------------------------
@@ -974,6 +655,8 @@ function mostrarSesionActiva(account){
   document.getElementById('btnLogout').addEventListener('click', () => {
     msalInstance.logoutRedirect();
   });
+
+  if (typeof inicializarRegistros === 'function') inicializarRegistros();
 }
 
 function mostrarBotonLogin(){
@@ -1663,6 +1346,155 @@ document.getElementById('cdBtnVaciar').addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+
+/* ============================================================
+ * PESTAÑA REGISTROS — consulta directa sobre RegBio26
+ * ------------------------------------------------------------
+ * Solo Fecha (y Llave) están indexadas en la lista, así que la
+ * ÚNICA condición que se manda al servidor es el rango de fecha.
+ * El resto de los filtros (ID, Nombre, Turno, Área, Biométrico,
+ * Facilitador, Líder) se aplican en el navegador sobre lo que ya
+ * se trajo — evita el riesgo de volver a topar con el error de
+ * "columna no indexada" en columnas que no lo están.
+ * ============================================================ */
+let regCamposMapa = null;
+let regIds = null;
+let regDatosDelRango = []; // todo lo que trajo la última consulta por fecha, antes de filtros locales
+
+async function inicializarRegistros(){
+  const status = document.getElementById('regStatus');
+  try {
+    status.textContent = 'Cargando…';
+    const token = await obtenerTokenGraph();
+    regIds = await resolverGraphIds(token);
+    regCamposMapa = await resolverCamposRegistros(token, regIds);
+
+    const campoFecha = regCamposMapa['Fecha'] || 'Fecha';
+    const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campoFecha})&$orderby=fields/${campoFecha} desc&$top=1`;
+    const data = await graphFetch(url, token);
+    if (data.value && data.value.length) {
+      const fechaMax = data.value[0].fields[campoFecha].slice(0, 10);
+      document.getElementById('regFechaDesde').value = fechaMax;
+      document.getElementById('regFechaHasta').value = fechaMax;
+    }
+    await regBuscar();
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al inicializar: ' + err.message;
+  }
+}
+
+async function regBuscar(){
+  const status = document.getElementById('regStatus');
+  const tbody = document.getElementById('regTbody');
+  const note = document.getElementById('regTableNote');
+  try {
+    status.textContent = 'Consultando…';
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+    const c = (n) => regCamposMapa[n] || n;
+
+    const desde = document.getElementById('regFechaDesde').value;
+    const hasta = document.getElementById('regFechaHasta').value;
+    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider']
+      .map(n => c(n)).join(',');
+
+    let url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$top=2000`;
+    if (desde || hasta) {
+      const partes = [];
+      if (desde) partes.push(`fields/${c('Fecha')} ge '${desde}T00:00:00Z'`);
+      if (hasta) partes.push(`fields/${c('Fecha')} le '${hasta}T23:59:59Z'`);
+      url += `&$filter=${encodeURIComponent(partes.join(' and '))}`;
+    }
+
+    const items = await graphFetchAll(url, token);
+    regDatosDelRango = items.map(it => {
+      const f = it.fields;
+      return {
+        idColab: f[c('IDColab')] || '',
+        nombre: f[c('Nombre')] || '',
+        turno: f[c('TurnoAsignado')] || '',
+        area: f[c('Area')] || '',
+        biometrico: f[c('Biometrico')] || '',
+        fecha: (f[c('Fecha')] || '').slice(0, 10),
+        hora: f[c('Hora')] || '',
+        facilitador: f[c('Facilitador')] || '',
+        lider: f[c('Lider')] || '',
+      };
+    });
+
+    regActualizarOpcionesDropdown();
+    regRenderTabla();
+    status.textContent = '';
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al consultar: ' + err.message;
+  }
+}
+
+function regActualizarOpcionesDropdown(){
+  const campos = [
+    ['regFiltroTurno', 'turno'], ['regFiltroArea', 'area'], ['regFiltroBiometrico', 'biometrico'],
+    ['regFiltroFacilitador', 'facilitador'], ['regFiltroLider', 'lider'],
+  ];
+  campos.forEach(([selectId, key]) => {
+    const select = document.getElementById(selectId);
+    const valorActual = select.value;
+    const valores = [...new Set(regDatosDelRango.map(r => r[key]).filter(Boolean))].sort();
+    select.innerHTML = `<option value="">${select.options[0].textContent}</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.value = valorActual;
+  });
+}
+
+function regRenderTabla(){
+  const tbody = document.getElementById('regTbody');
+  const note = document.getElementById('regTableNote');
+
+  const idQ = document.getElementById('regFiltroId').value.trim().toLowerCase();
+  const nombreQ = document.getElementById('regFiltroNombre').value.trim().toLowerCase();
+  const turnoQ = document.getElementById('regFiltroTurno').value;
+  const areaQ = document.getElementById('regFiltroArea').value;
+  const biometricoQ = document.getElementById('regFiltroBiometrico').value;
+  const facilitadorQ = document.getElementById('regFiltroFacilitador').value;
+  const liderQ = document.getElementById('regFiltroLider').value;
+
+  const filtradas = regDatosDelRango.filter(r =>
+    (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
+    (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
+    (!turnoQ || r.turno === turnoQ) &&
+    (!areaQ || r.area === areaQ) &&
+    (!biometricoQ || r.biometrico === biometricoQ) &&
+    (!facilitadorQ || r.facilitador === facilitadorQ) &&
+    (!liderQ || r.lider === liderQ)
+  );
+
+  const LIMITE_VISTA = 2000;
+  tbody.innerHTML = '';
+  filtradas.slice(0, LIMITE_VISTA).forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno}</td><td>${r.area}</td>
+      <td>${r.biometrico}</td><td>${r.fecha}</td><td>${r.hora}</td>
+      <td>${r.facilitador}</td><td>${r.lider}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  note.textContent = filtradas.length > LIMITE_VISTA
+    ? `Mostrando las primeras ${LIMITE_VISTA} de ${filtradas.length} filas que cumplen el filtro.`
+    : `${filtradas.length} fila(s).`;
+}
+
+document.getElementById('regBtnBuscar').addEventListener('click', regBuscar);
+document.getElementById('regBtnLimpiar').addEventListener('click', () => {
+  ['regFiltroId','regFiltroNombre'].forEach(id => document.getElementById(id).value = '');
+  ['regFiltroTurno','regFiltroArea','regFiltroBiometrico','regFiltroFacilitador','regFiltroLider'].forEach(id => document.getElementById(id).value = '');
+  regRenderTabla();
+});
+['regFiltroId','regFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', regRenderTabla));
+['regFiltroTurno','regFiltroArea','regFiltroBiometrico','regFiltroFacilitador','regFiltroLider'].forEach(id => document.getElementById(id).addEventListener('change', regRenderTabla));
 </script>
 
 </body>
