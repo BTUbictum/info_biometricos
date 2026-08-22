@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v23]</title>
+<title>Biométricos Colaboradores | Ubictum [v24]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -469,7 +469,7 @@
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v23</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v24</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -574,9 +574,69 @@
 </div><!-- /tab-carga -->
 
 <div class="tabpanel" id="tab-dia">
-  <div class="cd-stub">
-    <h2>Registros por Día</h2>
-    <p>Próximamente — consulta de RegBio26 filtrada por fecha, con Entrada/Salida/Horas en CDM/Turno/Facilitador/Líder.</p>
+  <h1>Registros por Día</h1>
+  <p class="lead">Entrada = primer checado del día, Salida = último — con la misma lógica de sesiones por hueco de tiempo que Carga de Data (funciona igual para turnos que cruzan medianoche, sin depender de un horario fijo de corte).</p>
+
+  <div class="reg-filtros">
+    <div class="reg-campo">
+      <label>Fecha desde</label>
+      <input type="date" id="diaFechaDesde">
+    </div>
+    <div class="reg-campo">
+      <label>Fecha hasta</label>
+      <input type="date" id="diaFechaHasta">
+    </div>
+    <div class="reg-campo">
+      <label>ID Colaborador</label>
+      <input type="text" id="diaFiltroId" placeholder="Ej. 100357">
+    </div>
+    <div class="reg-campo">
+      <label>Nombre</label>
+      <input type="text" id="diaFiltroNombre" placeholder="Buscar por nombre">
+    </div>
+    <div class="reg-campo">
+      <label>Turno</label>
+      <select id="diaFiltroTurno"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Área</label>
+      <select id="diaFiltroArea"><option value="">Todas</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Biométrico</label>
+      <select id="diaFiltroBiometrico"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Facilitador</label>
+      <select id="diaFiltroFacilitador"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Líder</label>
+      <select id="diaFiltroLider"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo reg-botones">
+      <button class="cd-btn" id="diaBtnBuscar" type="button">Buscar</button>
+      <button class="ghost" id="diaBtnLimpiar" type="button">Limpiar filtros</button>
+    </div>
+  </div>
+
+  <div class="status-row">
+    <span class="status" id="diaStatus"></span>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th><th>Fecha</th>
+            <th>Hora Entrada</th><th>Hora Salida</th><th>Tiempo</th><th>Facilitador</th><th>Líder</th>
+          </tr>
+        </thead>
+        <tbody id="diaTbody"></tbody>
+      </table>
+    </div>
+    <p class="table-note" id="diaTableNote"></p>
   </div>
 </div>
 
@@ -729,6 +789,7 @@ document.getElementById('tabbar').addEventListener('click', (e) => {
   document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  if (btn.dataset.tab === 'dia' && typeof inicializarDia === 'function') inicializarDia();
 });
 
 /* ============================================================
@@ -1468,7 +1529,7 @@ function regRenderTabla(){
     (!biometricoQ || r.biometrico === biometricoQ) &&
     (!facilitadorQ || r.facilitador === facilitadorQ) &&
     (!liderQ || r.lider === liderQ)
-  );
+  ).sort((a, b) => a.idColab.localeCompare(b.idColab) || a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora));
 
   const LIMITE_VISTA = 2000;
   tbody.innerHTML = '';
@@ -1495,6 +1556,201 @@ document.getElementById('regBtnLimpiar').addEventListener('click', () => {
 });
 ['regFiltroId','regFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', regRenderTabla));
 ['regFiltroTurno','regFiltroArea','regFiltroBiometrico','regFiltroFacilitador','regFiltroLider'].forEach(id => document.getElementById(id).addEventListener('change', regRenderTabla));
+
+/* ============================================================
+ * PESTAÑA REGISTROS POR DÍA
+ * ------------------------------------------------------------
+ * Entrada = primer checado del día lógico, Salida = último —
+ * usando la MISMA agrupación por sesión (hueco ≥ GAP_HORAS) que
+ * ya usa Carga de Data para calcular TurnoEfectivo. El "día" que
+ * se reporta es la fecha del checado de ENTRADA de la sesión,
+ * aunque la salida caiga al día siguiente (turno nocturno).
+ * Se trae ±1 día de margen para no perder sesiones que arrancan
+ * o cierran justo en el borde del rango pedido.
+ * ============================================================ */
+let diaInicializado = false;
+let diaDatosDelRango = []; // filas ya armadas (una por sesión/día), antes de filtros locales
+let diaValoresParaDropdown = []; // checados crudos del rango, para poblar los selects de filtro
+
+function diaFormatDuracion(horasDec){
+  const totalMin = Math.round(horasDec * 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+
+async function inicializarDia(){
+  if (diaInicializado) return;
+  diaInicializado = true;
+  const status = document.getElementById('diaStatus');
+  try {
+    status.textContent = 'Cargando…';
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+
+    const campoFecha = regCamposMapa['Fecha'] || 'Fecha';
+    const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campoFecha})&$orderby=fields/${campoFecha} desc&$top=1`;
+    const data = await graphFetch(url, token);
+    if (data.value && data.value.length) {
+      const fechaMax = data.value[0].fields[campoFecha].slice(0, 10);
+      document.getElementById('diaFechaDesde').value = fechaMax;
+      document.getElementById('diaFechaHasta').value = fechaMax;
+    }
+    await diaBuscar();
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al inicializar: ' + err.message;
+  }
+}
+
+async function diaBuscar(){
+  const status = document.getElementById('diaStatus');
+  try {
+    status.textContent = 'Consultando…';
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+    const c = (n) => regCamposMapa[n] || n;
+
+    const desdeStr = document.getElementById('diaFechaDesde').value;
+    const hastaStr = document.getElementById('diaFechaHasta').value;
+    if (!desdeStr || !hastaStr) { status.textContent = 'Elige un rango de fechas.'; return; }
+
+    // Margen de 1 día de cada lado para no cortar sesiones nocturnas en el borde.
+    const unDiaMs = 24 * 60 * 60 * 1000;
+    const desdeAmpliado = new Date(new Date(desdeStr + 'T00:00:00Z').getTime() - unDiaMs).toISOString();
+    const hastaAmpliado = new Date(new Date(hastaStr + 'T00:00:00Z').getTime() + unDiaMs).toISOString();
+
+    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider']
+      .map(n => c(n)).join(',');
+    const filtro = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
+    const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtro}&$top=2000`;
+
+    const items = await graphFetchAll(url, token);
+    const crudos = items.map(it => {
+      const f = it.fields;
+      const fecha = (f[c('Fecha')] || '').slice(0, 10);
+      const hora = f[c('Hora')] || '00:00:00';
+      return {
+        idColab: f[c('IDColab')] || '',
+        nombre: f[c('Nombre')] || '',
+        turno: f[c('TurnoAsignado')] || '',
+        area: f[c('Area')] || '',
+        biometrico: f[c('Biometrico')] || '',
+        fecha, hora,
+        facilitador: f[c('Facilitador')] || '',
+        lider: f[c('Lider')] || '',
+        dt: new Date(fecha + 'T' + hora + 'Z'),
+      };
+    });
+    diaValoresParaDropdown = crudos;
+
+    // Agrupar por colaborador y armar sesiones (Entrada/Salida del día).
+    const porColab = new Map();
+    crudos.forEach(r => {
+      if (!porColab.has(r.idColab)) porColab.set(r.idColab, []);
+      porColab.get(r.idColab).push(r);
+    });
+
+    const filas = [];
+    porColab.forEach(registros => {
+      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const sesiones = agruparEnSesiones(ordenados);
+      sesiones.forEach(sesion => {
+        const entrada = sesion.registros[0];
+        const salida = sesion.registros[sesion.registros.length - 1];
+        const hayRealSalida = sesion.registros.length > 1;
+        // El "día" reportado es la fecha del checado de entrada.
+        if (entrada.fecha < desdeStr || entrada.fecha > hastaStr) return;
+        filas.push({
+          idColab: entrada.idColab,
+          nombre: entrada.nombre,
+          turno: entrada.turno,
+          area: entrada.area,
+          biometrico: entrada.biometrico, // para el filtro, aunque no se muestre en la columna
+          fecha: entrada.fecha,
+          horaEntrada: entrada.hora,
+          horaSalida: hayRealSalida ? salida.hora : '—',
+          tiempo: hayRealSalida ? diaFormatDuracion((salida.dt - entrada.dt) / 3600000) : '—',
+          facilitador: entrada.facilitador,
+          lider: entrada.lider,
+        });
+      });
+    });
+
+    diaDatosDelRango = filas;
+    diaActualizarOpcionesDropdown();
+    diaRenderTabla();
+    status.textContent = '';
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al consultar: ' + err.message;
+  }
+}
+
+function diaActualizarOpcionesDropdown(){
+  const campos = [
+    ['diaFiltroTurno', 'turno'], ['diaFiltroArea', 'area'], ['diaFiltroBiometrico', 'biometrico'],
+    ['diaFiltroFacilitador', 'facilitador'], ['diaFiltroLider', 'lider'],
+  ];
+  campos.forEach(([selectId, key]) => {
+    const select = document.getElementById(selectId);
+    const valorActual = select.value;
+    const valores = [...new Set(diaValoresParaDropdown.map(r => r[key]).filter(Boolean))].sort();
+    select.innerHTML = `<option value="">${select.options[0].textContent}</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.value = valorActual;
+  });
+}
+
+function diaRenderTabla(){
+  const tbody = document.getElementById('diaTbody');
+  const note = document.getElementById('diaTableNote');
+
+  const idQ = document.getElementById('diaFiltroId').value.trim().toLowerCase();
+  const nombreQ = document.getElementById('diaFiltroNombre').value.trim().toLowerCase();
+  const turnoQ = document.getElementById('diaFiltroTurno').value;
+  const areaQ = document.getElementById('diaFiltroArea').value;
+  const biometricoQ = document.getElementById('diaFiltroBiometrico').value;
+  const facilitadorQ = document.getElementById('diaFiltroFacilitador').value;
+  const liderQ = document.getElementById('diaFiltroLider').value;
+
+  const filtradas = diaDatosDelRango.filter(r =>
+    (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
+    (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
+    (!turnoQ || r.turno === turnoQ) &&
+    (!areaQ || r.area === areaQ) &&
+    (!biometricoQ || r.biometrico === biometricoQ) &&
+    (!facilitadorQ || r.facilitador === facilitadorQ) &&
+    (!liderQ || r.lider === liderQ)
+  ).sort((a, b) => a.idColab.localeCompare(b.idColab) || a.fecha.localeCompare(b.fecha));
+
+  const LIMITE_VISTA = 2000;
+  tbody.innerHTML = '';
+  filtradas.slice(0, LIMITE_VISTA).forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno}</td><td>${r.area}</td><td>${r.fecha}</td>
+      <td>${r.horaEntrada}</td><td>${r.horaSalida}</td><td>${r.tiempo}</td>
+      <td>${r.facilitador}</td><td>${r.lider}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  note.textContent = filtradas.length > LIMITE_VISTA
+    ? `Mostrando las primeras ${LIMITE_VISTA} de ${filtradas.length} filas que cumplen el filtro.`
+    : `${filtradas.length} fila(s).`;
+}
+
+document.getElementById('diaBtnBuscar').addEventListener('click', diaBuscar);
+document.getElementById('diaBtnLimpiar').addEventListener('click', () => {
+  ['diaFiltroId','diaFiltroNombre'].forEach(id => document.getElementById(id).value = '');
+  ['diaFiltroTurno','diaFiltroArea','diaFiltroBiometrico','diaFiltroFacilitador','diaFiltroLider'].forEach(id => document.getElementById(id).value = '');
+  diaRenderTabla();
+});
+['diaFiltroId','diaFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', diaRenderTabla));
+['diaFiltroTurno','diaFiltroArea','diaFiltroBiometrico','diaFiltroFacilitador','diaFiltroLider'].forEach(id => document.getElementById(id).addEventListener('change', diaRenderTabla));
 </script>
 
 </body>
