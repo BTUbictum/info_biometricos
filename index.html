@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v20]</title>
+<title>Biométricos Colaboradores | Ubictum [v21]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -452,7 +452,7 @@
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn active" data-tab="carga" type="button">Carga de Data</button>
   <button class="tabbtn" data-tab="acomodo" type="button">Descargar Organizado</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v20</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v21</span>
 </div>
 
 <div class="tabpanel" id="tab-acomodo">
@@ -1364,10 +1364,23 @@ function construirRegistrosParaSubir(porColab, camposMapa){
  * DEDUPLICACIÓN + INSERCIÓN POR LOTES
  * ============================================================ */
 async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax, camposMapa){
-  cdLog(`Buscando registros ya existentes entre ${fechaMin} y ${fechaMax}…`);
+  // Margen de 1 día de cada lado + formato ISO completo (mismo que usamos al
+  // guardar) para no depender de cómo SharePoint reinterprete una fecha "pelona"
+  // según la zona horaria del sitio — de lo contrario el límite se desfasa y
+  // deja fuera registros que sí existen (visto en pruebas reales: mismo número
+  // de "faltantes" repetido de forma consistente, no aleatorio).
+  const unDiaMs = 24 * 60 * 60 * 1000;
+  const desde = new Date(fechaMin + 'T00:00:00Z');
+  desde.setTime(desde.getTime() - unDiaMs);
+  const hasta = new Date(fechaMax + 'T00:00:00Z');
+  hasta.setTime(hasta.getTime() + unDiaMs);
+  const desdeISO = desde.toISOString();
+  const hastaISO = hasta.toISOString();
+
+  cdLog(`Buscando registros ya existentes entre ${desdeISO} y ${hastaISO}…`);
   const campoFecha = camposMapa['Fecha'] || 'Fecha';
   const campoLlave = camposMapa['Llave'] || 'Llave';
-  const filtro = encodeURIComponent(`fields/${campoFecha} ge '${fechaMin}' and fields/${campoFecha} le '${fechaMax}'`);
+  const filtro = encodeURIComponent(`fields/${campoFecha} ge '${desdeISO}' and fields/${campoFecha} le '${hastaISO}'`);
   const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?expand=fields(select=${campoLlave})&$filter=${filtro}&$top=2000`;
   const items = await graphFetchAll(url, token);
   const set = new Set(items.map(it => it.fields[campoLlave]));
