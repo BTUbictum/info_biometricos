@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v18]</title>
+<title>Biométricos Colaboradores | Ubictum [v19]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -452,7 +452,7 @@
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn active" data-tab="carga" type="button">Carga de Data</button>
   <button class="tabbtn" data-tab="acomodo" type="button">Descargar Organizado</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v18</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v19</span>
 </div>
 
 <div class="tabpanel" id="tab-acomodo">
@@ -512,7 +512,7 @@
 
 <div class="tabpanel active" id="tab-carga">
   <h1>Carga de Data a SharePoint</h1>
-  <p class="lead">Sube el mismo excel crudo del biométrico — se filtra, se calcula Turno Efectivo/Semana/Facilitador/Líder, se valida contra duplicados por Llave, y se inserta solo lo nuevo en RegistrosBiometricos26.</p>
+  <p class="lead">Sube el mismo excel crudo del biométrico — se filtra, se calcula Turno Efectivo/Semana/Facilitador/Líder, se valida contra duplicados por Llave, y se inserta solo lo nuevo en RegBio26.</p>
 
   <div class="steps">
     <button class="step active" id="cdStep1" type="button"><span class="num">1</span>Subir excel</button>
@@ -540,7 +540,7 @@
 <div class="tabpanel" id="tab-dia">
   <div class="cd-stub">
     <h2>Registros por Día</h2>
-    <p>Próximamente — consulta de RegistrosBiometricos26 filtrada por fecha, con Entrada/Salida/Horas en CDM/Turno/Facilitador/Líder.</p>
+    <p>Próximamente — consulta de RegBio26 filtrada por fecha, con Entrada/Salida/Horas en CDM/Turno/Facilitador/Líder.</p>
   </div>
 </div>
 
@@ -1047,7 +1047,7 @@ document.getElementById('tabbar').addEventListener('click', (e) => {
 const SP_HOST = 'ubictum.sharepoint.com';
 const SP_SITE_PATH = '/sites/U-Biometricos';
 const SP_LISTAS = {
-  registros: 'RegistrosBiometricos26',
+  registros: 'RegBio26',
   catColab: 'CatColab',
   catTurnos: 'CatTurnos',
   log: 'Log',
@@ -1056,7 +1056,7 @@ const GRAPH = 'https://graph.microsoft.com/v1.0';
 
 let cdGraphIds = null;     // { siteId, listIds: { registros, catColab, catTurnos, log } }
 let cdCatTurnos = null;    // array de filas de CatTurnos (parseadas a minutos)
-let cdCamposRegistros = null; // mapa displayName -> nombre interno real, para RegistrosBiometricos26
+let cdCamposRegistros = null; // mapa displayName -> nombre interno real, para RegBio26
 let cdCatColab = null;     // Map IDColab -> { facilitador, lider }
 
 function cdLog(msg){
@@ -1098,7 +1098,7 @@ async function resolverGraphIds(token){
   const site = await graphFetch(`${GRAPH}/sites/${SP_HOST}:${SP_SITE_PATH}`, token);
   const siteId = site.id;
 
-  cdLog('Buscando listas (RegistrosBiometricos26, CatColab, CatTurnos, Log)…');
+  cdLog('Buscando listas (RegBio26, CatColab, CatTurnos, Log)…');
   const listas = await graphFetchAll(`${GRAPH}/sites/${siteId}/lists?$select=id,displayName`, token);
   const listIds = {};
   for (const key in SP_LISTAS) {
@@ -1117,7 +1117,7 @@ async function resolverCamposRegistros(token, ids){
   );
   const mismatches = cols.filter(c => c.name !== c.displayName && !c.name.startsWith('_'));
   if (mismatches.length) {
-    cdLog('DIAGNÓSTICO RegistrosBiometricos26 — columnas con nombre interno distinto al visible: ' +
+    cdLog('DIAGNÓSTICO RegBio26 — columnas con nombre interno distinto al visible: ' +
       mismatches.map(c => `"${c.displayName}" → interno: ${c.name}`).join(', '));
   }
   const mapa = {};
@@ -1369,7 +1369,7 @@ async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax, camposMapa
   const campoLlave = camposMapa['Llave'] || 'Llave';
   const filtro = encodeURIComponent(`fields/${campoFecha} ge '${fechaMin}' and fields/${campoFecha} le '${fechaMax}'`);
   const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?expand=fields(select=${campoLlave})&$filter=${filtro}&$top=2000`;
-  const items = await graphFetchAll(url, token, { headers: { 'Prefer': 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
+  const items = await graphFetchAll(url, token);
   const set = new Set(items.map(it => it.fields[campoLlave]));
   cdLog(`Ya existían ${set.size} registros en ese rango.`);
   return set;
@@ -1498,7 +1498,7 @@ document.getElementById('cdBtnSubir').addEventListener('click', async () => {
 
     let insertados = 0, errores = 0;
     if (nuevos.length) {
-      cdLog('Insertando en RegistrosBiometricos26…');
+      cdLog('Insertando en RegBio26…');
       const res = await insertarRegistrosEnLotes(token, ids, nuevos);
       insertados = res.insertados; errores = res.errores;
     }
