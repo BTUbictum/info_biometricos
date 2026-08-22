@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v19]</title>
+<title>Biométricos Colaboradores | Ubictum [v20]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -452,7 +452,7 @@
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn active" data-tab="carga" type="button">Carga de Data</button>
   <button class="tabbtn" data-tab="acomodo" type="button">Descargar Organizado</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v19</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v20</span>
 </div>
 
 <div class="tabpanel" id="tab-acomodo">
@@ -1375,39 +1375,78 @@ async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax, camposMapa
   return set;
 }
 
+function cdEsperar(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+async function enviarLoteConReintentos(token, ids, lote, intento = 1){
+  const MAX_INTENTOS = 5;
+  const body = {
+    requests: lote.map((reg, j) => ({
+      id: String(j + 1),
+      method: 'POST',
+      url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items`,
+      headers: { 'Content-Type': 'application/json' },
+      body: { fields: reg },
+    })),
+  };
+
+  let resp;
+  try {
+    resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
+  } catch (e) {
+    // El propio $batch chocó con el límite de ritmo (429) — todo el lote se reintenta.
+    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
+      const espera = 1000 * Math.pow(2, intento); // 2s, 4s, 8s, 16s…
+      cdLog(`Límite de ritmo alcanzado, reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
+      await cdEsperar(espera);
+      return enviarLoteConReintentos(token, ids, lote, intento + 1);
+    }
+    return { insertados: 0, errores: lote.length, pendientesDe429: [] };
+  }
+
+  let insertados = 0, errores = 0;
+  const pendientesDe429 = [];
+  let primerErrorDelLote = null;
+  resp.responses.forEach(r => {
+    if (r.status >= 200 && r.status < 300) {
+      insertados++;
+    } else if (r.status === 429) {
+      // Renglón individual chocó con el límite — se reintenta aparte, no se cuenta como error todavía.
+      const idx = parseInt(r.id, 10) - 1;
+      pendientesDe429.push(lote[idx]);
+    } else {
+      errores++;
+      if (!primerErrorDelLote) primerErrorDelLote = r;
+    }
+  });
+  if (primerErrorDelLote) {
+    cdLog('Detalle del error (renglón ' + primerErrorDelLote.id + '): ' + JSON.stringify(primerErrorDelLote.body || primerErrorDelLote));
+  }
+
+  if (pendientesDe429.length && intento < MAX_INTENTOS) {
+    const espera = 1000 * Math.pow(2, intento);
+    cdLog(`${pendientesDe429.length} renglones chocaron con el límite de ritmo, reintentando en ${espera/1000}s (intento ${intento})…`);
+    await cdEsperar(espera);
+    const reintento = await enviarLoteConReintentos(token, ids, pendientesDe429, intento + 1);
+    insertados += reintento.insertados;
+    errores += reintento.errores;
+  } else {
+    errores += pendientesDe429.length;
+  }
+
+  return { insertados, errores };
+}
+
 async function insertarRegistrosEnLotes(token, ids, registros){
   let insertados = 0, errores = 0;
   const TAM_LOTE = 20;
+  const PAUSA_ENTRE_LOTES_MS = 350; // margen para no chocar con el límite de ritmo de Graph
   for (let i = 0; i < registros.length; i += TAM_LOTE) {
     const lote = registros.slice(i, i + TAM_LOTE);
-    const body = {
-      requests: lote.map((reg, j) => ({
-        id: String(j + 1),
-        method: 'POST',
-        url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items`,
-        headers: { 'Content-Type': 'application/json' },
-        body: { fields: reg },
-      })),
-    };
-    try {
-      const resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
-      let primerErrorDelLote = null;
-      resp.responses.forEach(r => {
-        if (r.status >= 200 && r.status < 300) {
-          insertados++;
-        } else {
-          errores++;
-          if (!primerErrorDelLote) primerErrorDelLote = r;
-        }
-      });
-      if (primerErrorDelLote) {
-        cdLog('Detalle del error (renglón ' + primerErrorDelLote.id + '): ' + JSON.stringify(primerErrorDelLote.body || primerErrorDelLote));
-      }
-    } catch (e) {
-      errores += lote.length;
-      cdLog('Error en lote: ' + e.message);
-    }
+    const res = await enviarLoteConReintentos(token, ids, lote);
+    insertados += res.insertados;
+    errores += res.errores;
     cdLog(`Progreso: ${Math.min(i + TAM_LOTE, registros.length)}/${registros.length}`);
+    if (i + TAM_LOTE < registros.length) await cdEsperar(PAUSA_ENTRE_LOTES_MS);
   }
   return { insertados, errores };
 }
