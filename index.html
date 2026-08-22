@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v17]</title>
+<title>Biométricos Colaboradores | Ubictum [v18]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -452,7 +452,7 @@
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn active" data-tab="carga" type="button">Carga de Data</button>
   <button class="tabbtn" data-tab="acomodo" type="button">Descargar Organizado</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v17</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v18</span>
 </div>
 
 <div class="tabpanel" id="tab-acomodo">
@@ -1056,6 +1056,7 @@ const GRAPH = 'https://graph.microsoft.com/v1.0';
 
 let cdGraphIds = null;     // { siteId, listIds: { registros, catColab, catTurnos, log } }
 let cdCatTurnos = null;    // array de filas de CatTurnos (parseadas a minutos)
+let cdCamposRegistros = null; // mapa displayName -> nombre interno real, para RegistrosBiometricos26
 let cdCatColab = null;     // Map IDColab -> { facilitador, lider }
 
 function cdLog(msg){
@@ -1107,6 +1108,22 @@ async function resolverGraphIds(token){
   }
   cdGraphIds = { siteId, listIds };
   return cdGraphIds;
+}
+
+async function resolverCamposRegistros(token, ids){
+  if (cdCamposRegistros) return cdCamposRegistros;
+  const cols = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/columns?$select=name,displayName`, token
+  );
+  const mismatches = cols.filter(c => c.name !== c.displayName && !c.name.startsWith('_'));
+  if (mismatches.length) {
+    cdLog('DIAGNÓSTICO RegistrosBiometricos26 — columnas con nombre interno distinto al visible: ' +
+      mismatches.map(c => `"${c.displayName}" → interno: ${c.name}`).join(', '));
+  }
+  const mapa = {};
+  cols.forEach(c => { mapa[c.displayName] = c.name; });
+  cdCamposRegistros = mapa;
+  return mapa;
 }
 
 /* ============================================================
@@ -1306,8 +1323,9 @@ function leerExcelCarga(wb){
   return { porColab, leidos, descartados };
 }
 
-function construirRegistrosParaSubir(porColab){
+function construirRegistrosParaSubir(porColab, camposMapa){
   const salida = [];
+  const c = (displayName) => camposMapa[displayName] || displayName;
   porColab.forEach((registros, idColab) => {
     const ordenados = registros.slice().sort((a,b) => a.dt - b.dt);
     const sesiones = agruparEnSesiones(ordenados);
@@ -1320,21 +1338,21 @@ function construirRegistrosParaSubir(porColab){
         const { semana, year } = cdSemanaISO(r.dt);
         const llave = `${r.idColab}_${fechaStr}_${horaStr}`;
         salida.push({
-          IDColab: r.idColab,
-          Nombre: r.nombre,
-          Grupo: r.grupo,
-          TurnoAsignado: r.turnoAsignado,
-          TurnoEfectivo: turnoEfectivo,
-          Area: r.area,
-          TipoColab: r.tipoColab,
-          Fecha: fechaStr + 'T00:00:00Z',
-          Hora: horaStr,
-          Semana: semana,
-          YearSemana: year,
-          Biometrico: r.biometrico,
-          Llave: llave,
-          Facilitador: catColabInfo.facilitador,
-          Lider: catColabInfo.lider,
+          [c('IDColab')]: r.idColab,
+          [c('Nombre')]: r.nombre,
+          [c('Grupo')]: r.grupo,
+          [c('TurnoAsignado')]: r.turnoAsignado,
+          [c('TurnoEfectivo')]: turnoEfectivo,
+          [c('Area')]: r.area,
+          [c('TipoColab')]: r.tipoColab,
+          [c('Fecha')]: fechaStr + 'T00:00:00Z',
+          [c('Hora')]: horaStr,
+          [c('Semana')]: semana,
+          [c('YearSemana')]: year,
+          [c('Biometrico')]: r.biometrico,
+          [c('Llave')]: llave,
+          [c('Facilitador')]: catColabInfo.facilitador,
+          [c('Lider')]: catColabInfo.lider,
         });
       });
     });
@@ -1345,12 +1363,14 @@ function construirRegistrosParaSubir(porColab){
 /* ============================================================
  * DEDUPLICACIÓN + INSERCIÓN POR LOTES
  * ============================================================ */
-async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax){
+async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax, camposMapa){
   cdLog(`Buscando registros ya existentes entre ${fechaMin} y ${fechaMax}…`);
-  const filtro = encodeURIComponent(`fields/Fecha ge '${fechaMin}' and fields/Fecha le '${fechaMax}'`);
-  const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?expand=fields(select=Llave)&$filter=${filtro}&$top=2000`;
+  const campoFecha = camposMapa['Fecha'] || 'Fecha';
+  const campoLlave = camposMapa['Llave'] || 'Llave';
+  const filtro = encodeURIComponent(`fields/${campoFecha} ge '${fechaMin}' and fields/${campoFecha} le '${fechaMax}'`);
+  const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?expand=fields(select=${campoLlave})&$filter=${filtro}&$top=2000`;
   const items = await graphFetchAll(url, token, { headers: { 'Prefer': 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
-  const set = new Set(items.map(it => it.fields.Llave));
+  const set = new Set(items.map(it => it.fields[campoLlave]));
   cdLog(`Ya existían ${set.size} registros en ese rango.`);
   return set;
 }
@@ -1450,6 +1470,7 @@ document.getElementById('cdBtnSubir').addEventListener('click', async () => {
     const token = await obtenerTokenGraph();
     const ids = await resolverGraphIds(token);
     await cargarCatalogos(token, ids);
+    const camposMapa = await resolverCamposRegistros(token, ids);
 
     cdLog('Leyendo excel…');
     const { porColab, leidos, descartados } = leerExcelCarga(cdWorkbook);
@@ -1457,18 +1478,20 @@ document.getElementById('cdBtnSubir').addEventListener('click', async () => {
     document.getElementById('cdDescartados').textContent = descartados;
 
     cdLog('Calculando Turno Efectivo, Semana, Llave, Facilitador/Líder…');
-    const registros = construirRegistrosParaSubir(porColab);
+    const registros = construirRegistrosParaSubir(porColab, camposMapa);
 
     if (!registros.length) {
       cdLog('No hay registros válidos para subir.');
       return;
     }
 
-    const fechas = registros.map(r => r.Fecha).sort();
-    const fechaMin = fechas[0], fechaMax = fechas[fechas.length - 1];
+    const campoFecha = camposMapa['Fecha'] || 'Fecha';
+    const campoLlave = camposMapa['Llave'] || 'Llave';
+    const fechas = registros.map(r => r[campoFecha]).sort();
+    const fechaMin = fechas[0].slice(0,10), fechaMax = fechas[fechas.length - 1].slice(0,10);
 
-    const llavesExistentes = await buscarLlavesExistentes(token, ids, fechaMin, fechaMax);
-    const nuevos = registros.filter(r => !llavesExistentes.has(r.Llave));
+    const llavesExistentes = await buscarLlavesExistentes(token, ids, fechaMin, fechaMax, camposMapa);
+    const nuevos = registros.filter(r => !llavesExistentes.has(r[campoLlave]));
     const duplicados = registros.length - nuevos.length;
     document.getElementById('cdDuplicados').textContent = duplicados;
     cdLog(`${nuevos.length} registros nuevos por insertar (${duplicados} ya existían).`);
