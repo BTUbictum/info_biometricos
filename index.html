@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v26]</title>
+<title>Biométricos Colaboradores | Ubictum [v27]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -372,12 +372,19 @@
     position: sticky;
     top: 0;
   }
+  thead.thead-azul th{ background: var(--azul); }
+  thead.thead-gris th{ background: var(--gris); }
   tbody td{
     padding: 8px 10px;
     border-bottom: 1px solid var(--gris-line);
     white-space: nowrap;
   }
   tbody tr:nth-child(even){ background: var(--gris-light); }
+  tbody tr.fila-clickeable{ cursor: pointer; }
+  tbody tr.fila-clickeable:hover{ background: #eef2f2; }
+  tbody tr.fila-seleccionada{ background: #d6dadb !important; }
+  .sem-dia-label{ font-size: 10px; font-weight: 400; opacity: .75; display: block; }
+  .sem-hora-doble{ display: flex; flex-direction: column; line-height: 1.5; }
   .table-wrap{
     max-height: 420px;
     overflow: auto;
@@ -469,7 +476,7 @@
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v26</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v27</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -526,7 +533,7 @@
   <div class="card">
     <div class="table-wrap">
       <table>
-        <thead>
+        <thead class="thead-azul">
           <tr>
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
             <th>Biométrico</th><th>Fecha</th><th>Hora</th><th>Facilitador</th><th>Líder</th>
@@ -627,7 +634,7 @@
   <div class="card">
     <div class="table-wrap">
       <table>
-        <thead>
+        <thead class="thead-gris">
           <tr>
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th><th>Fecha</th>
             <th>Hora Entrada</th><th>Hora Salida</th><th>Tiempo</th><th>Facilitador</th><th>Líder</th>
@@ -697,7 +704,8 @@
         <thead>
           <tr>
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
-            <th>Lun</th><th>Mar</th><th>Mié</th><th>Jue</th><th>Vie</th><th>Sáb</th><th>Dom</th>
+            <th id="thDiaLun">Lun</th><th id="thDiaMar">Mar</th><th id="thDiaMie">Mié</th>
+            <th id="thDiaJue">Jue</th><th id="thDiaVie">Vie</th><th id="thDiaSab">Sáb</th><th id="thDiaDom">Dom</th>
           </tr>
         </thead>
         <tbody id="semTbody"></tbody>
@@ -1576,6 +1584,8 @@ function regActualizarOpcionesDropdown(){
   });
 }
 
+let regFilasSeleccionadas = new Set(); // claves idColab_fecha_hora de filas marcadas
+
 function regRenderTabla(){
   const tbody = document.getElementById('regTbody');
   const note = document.getElementById('regTableNote');
@@ -1601,12 +1611,24 @@ function regRenderTabla(){
   const LIMITE_VISTA = 2000;
   tbody.innerHTML = '';
   filtradas.slice(0, LIMITE_VISTA).forEach(r => {
+    const clave = `${r.idColab}_${r.fecha}_${r.hora}`;
     const tr = document.createElement('tr');
+    tr.className = 'fila-clickeable' + (regFilasSeleccionadas.has(clave) ? ' fila-seleccionada' : '');
+    tr.dataset.clave = clave;
     tr.innerHTML = `
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno}</td><td>${r.area}</td>
       <td>${r.biometrico}</td><td>${r.fecha}</td><td>${r.hora}</td>
       <td>${r.facilitador}</td><td>${r.lider}</td>
     `;
+    tr.addEventListener('click', () => {
+      if (regFilasSeleccionadas.has(clave)) {
+        regFilasSeleccionadas.delete(clave);
+        tr.classList.remove('fila-seleccionada');
+      } else {
+        regFilasSeleccionadas.add(clave);
+        tr.classList.add('fila-seleccionada');
+      }
+    });
     tbody.appendChild(tr);
   });
 
@@ -1877,6 +1899,13 @@ async function semBuscar(){
     document.getElementById('semRangoLabel').textContent =
       `${semFormatFechaCorta(lunes)} – ${semFormatFechaCorta(domingo)} de ${domingo.getUTCFullYear()}`;
 
+    const idsThDia = ['thDiaLun','thDiaMar','thDiaMie','thDiaJue','thDiaVie','thDiaSab','thDiaDom'];
+    idsThDia.forEach((id, idx) => {
+      const fechaDia = new Date(lunes.getTime() + idx * 86400000);
+      document.getElementById(id).innerHTML =
+        `${DIAS_SEMANA[idx]}<span class="sem-dia-label">${semFormatFechaCorta(fechaDia)}</span>`;
+    });
+
     status.textContent = 'Consultando…';
     const token = await obtenerTokenGraph();
     if (!regIds) regIds = await resolverGraphIds(token);
@@ -1935,7 +1964,9 @@ async function semBuscar(){
         const salida = sesion.registros[sesion.registros.length - 1];
         const hayRealSalida = sesion.registros.length > 1;
         porDia[idxDia] = {
-          texto: hayRealSalida ? `${entrada.hora.slice(0,5)}-${salida.hora.slice(0,5)}` : `${entrada.hora.slice(0,5)}-—`,
+          texto: hayRealSalida
+            ? `<span class="sem-hora-doble"><span>${entrada.hora.slice(0,5)}</span><span>${salida.hora.slice(0,5)}</span></span>`
+            : `<span class="sem-hora-doble"><span>${entrada.hora.slice(0,5)}</span><span>—</span></span>`,
           entrada,
         };
       });
