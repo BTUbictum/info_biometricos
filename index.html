@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v25]</title>
+<title>Biométricos Colaboradores | Ubictum [v26]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -469,7 +469,7 @@
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v25</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v26</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -641,9 +641,69 @@
 </div>
 
 <div class="tabpanel" id="tab-semana">
-  <div class="cd-stub">
-    <h2>Registros por Semana</h2>
-    <p>Próximamente — vista semanal con columnas por día y estatus A/D/F.</p>
+  <h1>Registros por Semana</h1>
+  <p class="lead">Entrada-Salida de cada día en la misma celda. Turno/Área de la fila = el que más días tuvo esa semana (empate → el primer día de la semana).</p>
+
+  <div class="reg-filtros">
+    <div class="reg-campo">
+      <label>Semana</label>
+      <input type="week" id="semFiltroSemana">
+    </div>
+    <div class="reg-campo">
+      <label>Rango de fechas</label>
+      <div id="semRangoLabel" style="padding:9px 0 0; font-size:13.5px; font-weight:600; color:var(--negro,#111);">—</div>
+    </div>
+    <div class="reg-campo">
+      <label>ID Colaborador</label>
+      <input type="text" id="semFiltroId" placeholder="Ej. 100357">
+    </div>
+    <div class="reg-campo">
+      <label>Nombre</label>
+      <input type="text" id="semFiltroNombre" placeholder="Buscar por nombre">
+    </div>
+    <div class="reg-campo">
+      <label>Turno</label>
+      <select id="semFiltroTurno"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Área</label>
+      <select id="semFiltroArea"><option value="">Todas</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Biométrico</label>
+      <select id="semFiltroBiometrico"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Facilitador</label>
+      <select id="semFiltroFacilitador"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Líder</label>
+      <select id="semFiltroLider"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo reg-botones">
+      <button class="cd-btn" id="semBtnBuscar" type="button">Buscar</button>
+      <button class="ghost" id="semBtnLimpiar" type="button">Limpiar filtros</button>
+    </div>
+  </div>
+
+  <div class="status-row">
+    <span class="status" id="semStatus"></span>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
+            <th>Lun</th><th>Mar</th><th>Mié</th><th>Jue</th><th>Vie</th><th>Sáb</th><th>Dom</th>
+          </tr>
+        </thead>
+        <tbody id="semTbody"></tbody>
+      </table>
+    </div>
+    <p class="table-note" id="semTableNote"></p>
   </div>
 </div>
 
@@ -790,6 +850,7 @@ document.getElementById('tabbar').addEventListener('click', (e) => {
   btn.classList.add('active');
   document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
   if (btn.dataset.tab === 'dia' && typeof inicializarDia === 'function') inicializarDia();
+  if (btn.dataset.tab === 'semana' && typeof inicializarSemana === 'function') inicializarSemana();
 });
 
 /* ============================================================
@@ -1757,6 +1818,231 @@ document.getElementById('diaBtnLimpiar').addEventListener('click', () => {
 });
 ['diaFiltroId','diaFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', diaRenderTabla));
 ['diaFiltroTurno','diaFiltroArea','diaFiltroBiometrico','diaFiltroFacilitador','diaFiltroLider'].forEach(id => document.getElementById(id).addEventListener('change', diaRenderTabla));
+
+/* ============================================================
+ * PESTAÑA REGISTROS POR SEMANA
+ * ------------------------------------------------------------
+ * Una fila por colaborador para toda la semana; cada columna de
+ * día (Lun-Dom) trae "HH:MM-HH:MM" (Entrada-Salida) en la misma
+ * celda. Reutiliza agruparEnSesiones() — el "día" de cada sesión
+ * es la fecha de su Entrada, igual que en Registros por Día.
+ * Turno/Área de la fila = el que aparece en más días esa semana;
+ * empate → el primer día de la semana (orden Lun→Dom).
+ * ============================================================ */
+const DIAS_SEMANA = ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'];
+let semInicializado = false;
+let semValoresParaDropdown = [];
+let diaSemanaFilas = [];
+
+// Lunes y domingo (UTC) de una semana ISO 8601 dada.
+function semanaAFechas(year, semana){
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const diaSemJan4 = (jan4.getUTCDay() + 6) % 7; // lunes=0 ... domingo=6
+  const lunesSemana1 = new Date(jan4.getTime() - diaSemJan4 * 86400000);
+  const lunes = new Date(lunesSemana1.getTime() + (semana - 1) * 7 * 86400000);
+  const domingo = new Date(lunes.getTime() + 6 * 86400000);
+  return { lunes, domingo };
+}
+
+function semFormatFechaCorta(d){
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return d.getUTCDate() + ' ' + meses[d.getUTCMonth()];
+}
+
+async function inicializarSemana(){
+  if (semInicializado) return;
+  semInicializado = true;
+  const hoy = new Date();
+  const { semana, year } = cdSemanaISO(hoy);
+  document.getElementById('semFiltroSemana').value = `${year}-W${semana}`;
+  await semBuscar();
+}
+
+async function semBuscar(){
+  const status = document.getElementById('semStatus');
+  try {
+    const valorSemana = document.getElementById('semFiltroSemana').value; // "2026-W34"
+    let year, semana;
+    if (valorSemana) {
+      [year, semana] = valorSemana.split('-W').map(Number);
+    } else {
+      const r = cdSemanaISO(new Date());
+      year = Number(r.year); semana = Number(r.semana);
+      document.getElementById('semFiltroSemana').value = `${r.year}-W${r.semana}`;
+    }
+
+    const { lunes, domingo } = semanaAFechas(year, semana);
+    const lunesStr = lunes.toISOString().slice(0, 10);
+    const domingoStr = domingo.toISOString().slice(0, 10);
+    document.getElementById('semRangoLabel').textContent =
+      `${semFormatFechaCorta(lunes)} – ${semFormatFechaCorta(domingo)} de ${domingo.getUTCFullYear()}`;
+
+    status.textContent = 'Consultando…';
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+    const c = (n) => regCamposMapa[n] || n;
+
+    // Margen de 1 día de cada lado para no cortar sesiones nocturnas en el borde de la semana.
+    const unDiaMs = 24 * 60 * 60 * 1000;
+    const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
+    const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
+
+    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider']
+      .map(n => c(n)).join(',');
+    const filtro = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
+    const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtro}&$top=5000`;
+
+    const items = await graphFetchAll(url, token);
+    const crudos = items.map(it => {
+      const f = it.fields;
+      const fecha = (f[c('Fecha')] || '').slice(0, 10);
+      const hora = f[c('Hora')] || '00:00:00';
+      return {
+        idColab: f[c('IDColab')] || '',
+        nombre: f[c('Nombre')] || '',
+        turno: f[c('TurnoAsignado')] || '',
+        area: f[c('Area')] || '',
+        biometrico: f[c('Biometrico')] || '',
+        fecha, hora,
+        facilitador: f[c('Facilitador')] || '',
+        lider: f[c('Lider')] || '',
+        dt: new Date(fecha + 'T' + hora + 'Z'),
+      };
+    });
+    semValoresParaDropdown = crudos;
+
+    // Agrupar por colaborador → sesiones → asignar cada sesión a su día de la semana.
+    const porColab = new Map();
+    crudos.forEach(r => {
+      if (!porColab.has(r.idColab)) porColab.set(r.idColab, []);
+      porColab.get(r.idColab).push(r);
+    });
+
+    const filas = [];
+    porColab.forEach(registros => {
+      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const sesiones = agruparEnSesiones(ordenados);
+
+      // Días de esa semana (0=Lun..6=Dom) con su sesión correspondiente.
+      const porDia = new Array(7).fill(null);
+      sesiones.forEach(sesion => {
+        const entrada = sesion.registros[0];
+        if (entrada.fecha < lunesStr || entrada.fecha > domingoStr) return;
+        const offsetMs = new Date(entrada.fecha + 'T00:00:00Z') - lunes;
+        const idxDia = Math.round(offsetMs / 86400000);
+        if (idxDia < 0 || idxDia > 6) return;
+        const salida = sesion.registros[sesion.registros.length - 1];
+        const hayRealSalida = sesion.registros.length > 1;
+        porDia[idxDia] = {
+          texto: hayRealSalida ? `${entrada.hora.slice(0,5)}-${salida.hora.slice(0,5)}` : `${entrada.hora.slice(0,5)}-—`,
+          entrada,
+        };
+      });
+
+      if (porDia.every(d => d === null)) return; // sin ningún día de esta semana, no se muestra
+
+      // Turno/Área que más días aparece; empate → primer día (Lun→Dom).
+      const conteoTurno = {}, conteoArea = {};
+      let primerConDatos = null;
+      porDia.forEach((d, idx) => {
+        if (!d) return;
+        if (!primerConDatos) primerConDatos = d.entrada;
+        conteoTurno[d.entrada.turno] = (conteoTurno[d.entrada.turno] || 0) + 1;
+        conteoArea[d.entrada.area] = (conteoArea[d.entrada.area] || 0) + 1;
+      });
+      const moda = (conteo, porDiaArr, campo) => {
+        let mejorValor = null, mejorCount = -1;
+        porDiaArr.forEach(d => {
+          if (!d) return;
+          const v = d.entrada[campo];
+          if (conteo[v] > mejorCount) { mejorCount = conteo[v]; mejorValor = v; }
+        });
+        return mejorValor;
+      };
+      const turnoRep = moda(conteoTurno, porDia, 'turno');
+      const areaRep = moda(conteoArea, porDia, 'area');
+
+      filas.push({
+        idColab: primerConDatos.idColab,
+        nombre: primerConDatos.nombre,
+        turno: turnoRep,
+        area: areaRep,
+        dias: porDia.map(d => d ? d.texto : '—'),
+        biometricoValores: porDia.filter(Boolean).map(d => d.entrada.biometrico),
+        facilitador: primerConDatos.facilitador,
+        lider: primerConDatos.lider,
+      });
+    });
+
+    diaSemanaFilas = filas; // usado por semRenderTabla
+    semActualizarOpcionesDropdown();
+    semRenderTabla();
+    status.textContent = '';
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al consultar: ' + err.message;
+  }
+}
+
+function semActualizarOpcionesDropdown(){
+  const campos = [
+    ['semFiltroTurno', 'turno'], ['semFiltroArea', 'area'], ['semFiltroBiometrico', 'biometrico'],
+    ['semFiltroFacilitador', 'facilitador'], ['semFiltroLider', 'lider'],
+  ];
+  campos.forEach(([selectId, key]) => {
+    const select = document.getElementById(selectId);
+    const valorActual = select.value;
+    const valores = [...new Set(semValoresParaDropdown.map(r => r[key]).filter(Boolean))].sort();
+    select.innerHTML = `<option value="">${select.options[0].textContent}</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.value = valorActual;
+  });
+}
+
+function semRenderTabla(){
+  const tbody = document.getElementById('semTbody');
+  const note = document.getElementById('semTableNote');
+
+  const idQ = document.getElementById('semFiltroId').value.trim().toLowerCase();
+  const nombreQ = document.getElementById('semFiltroNombre').value.trim().toLowerCase();
+  const turnoQ = document.getElementById('semFiltroTurno').value;
+  const areaQ = document.getElementById('semFiltroArea').value;
+  const biometricoQ = document.getElementById('semFiltroBiometrico').value;
+  const facilitadorQ = document.getElementById('semFiltroFacilitador').value;
+  const liderQ = document.getElementById('semFiltroLider').value;
+
+  const filtradas = diaSemanaFilas.filter(r =>
+    (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
+    (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
+    (!turnoQ || r.turno === turnoQ) &&
+    (!areaQ || r.area === areaQ) &&
+    (!biometricoQ || r.biometricoValores.includes(biometricoQ)) &&
+    (!facilitadorQ || r.facilitador === facilitadorQ) &&
+    (!liderQ || r.lider === liderQ)
+  ).sort((a, b) => a.idColab.localeCompare(b.idColab));
+
+  tbody.innerHTML = '';
+  filtradas.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno || ''}</td><td>${r.area || ''}</td>
+      ${r.dias.map(d => `<td>${d}</td>`).join('')}
+    `;
+    tbody.appendChild(tr);
+  });
+
+  note.textContent = `${filtradas.length} colaborador(es).`;
+}
+
+document.getElementById('semBtnBuscar').addEventListener('click', semBuscar);
+document.getElementById('semBtnLimpiar').addEventListener('click', () => {
+  ['semFiltroId','semFiltroNombre'].forEach(id => document.getElementById(id).value = '');
+  ['semFiltroTurno','semFiltroArea','semFiltroBiometrico','semFiltroFacilitador','semFiltroLider'].forEach(id => document.getElementById(id).value = '');
+  semRenderTabla();
+});
+['semFiltroId','semFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', semRenderTabla));
+['semFiltroTurno','semFiltroArea','semFiltroBiometrico','semFiltroFacilitador','semFiltroLider'].forEach(id => document.getElementById(id).addEventListener('change', semRenderTabla));
 </script>
 
 </body>
