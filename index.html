@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v27]</title>
+<title>Biométricos Colaboradores | Ubictum [v28]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -476,7 +476,7 @@
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v27</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v28</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1750,15 +1750,18 @@ async function diaBuscar(){
         const entrada = sesion.registros[0];
         const salida = sesion.registros[sesion.registros.length - 1];
         const hayRealSalida = sesion.registros.length > 1;
-        // El "día" reportado es la fecha del checado de entrada.
-        if (entrada.fecha < desdeStr || entrada.fecha > hastaStr) return;
+        // El "día" reportado es la fecha de la SALIDA (día en que termina la jornada,
+        // no en el que empieza) — respaldo en la fecha de entrada solo si aún no hay
+        // salida real registrada (turno en curso).
+        const fechaReportada = hayRealSalida ? salida.fecha : entrada.fecha;
+        if (fechaReportada < desdeStr || fechaReportada > hastaStr) return;
         filas.push({
           idColab: entrada.idColab,
           nombre: entrada.nombre,
           turno: entrada.turno,
           area: entrada.area,
           biometrico: entrada.biometrico, // para el filtro, aunque no se muestre en la columna
-          fecha: entrada.fecha,
+          fecha: fechaReportada,
           horaEntrada: entrada.hora,
           horaSalida: hayRealSalida ? salida.hora : '—',
           tiempo: hayRealSalida ? diaFormatDuracion((salida.dt - entrada.dt) / 3600000) : '—',
@@ -1957,12 +1960,15 @@ async function semBuscar(){
       const porDia = new Array(7).fill(null);
       sesiones.forEach(sesion => {
         const entrada = sesion.registros[0];
-        if (entrada.fecha < lunesStr || entrada.fecha > domingoStr) return;
-        const offsetMs = new Date(entrada.fecha + 'T00:00:00Z') - lunes;
-        const idxDia = Math.round(offsetMs / 86400000);
-        if (idxDia < 0 || idxDia > 6) return;
         const salida = sesion.registros[sesion.registros.length - 1];
         const hayRealSalida = sesion.registros.length > 1;
+        // El "día" reportado es la fecha de la SALIDA (respaldo en entrada si aún
+        // no hay salida real, ej. turno en curso).
+        const fechaReportada = hayRealSalida ? salida.fecha : entrada.fecha;
+        if (fechaReportada < lunesStr || fechaReportada > domingoStr) return;
+        const offsetMs = new Date(fechaReportada + 'T00:00:00Z') - lunes;
+        const idxDia = Math.round(offsetMs / 86400000);
+        if (idxDia < 0 || idxDia > 6) return;
         porDia[idxDia] = {
           texto: hayRealSalida
             ? `<span class="sem-hora-doble"><span>${entrada.hora.slice(0,5)}</span><span>${salida.hora.slice(0,5)}</span></span>`
