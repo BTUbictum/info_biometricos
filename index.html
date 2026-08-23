@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v24]</title>
+<title>Biométricos Colaboradores | Ubictum [v25]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -469,7 +469,7 @@
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v24</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v25</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -575,7 +575,7 @@
 
 <div class="tabpanel" id="tab-dia">
   <h1>Registros por Día</h1>
-  <p class="lead">Entrada = primer checado del día, Salida = último — con la misma lógica de sesiones por hueco de tiempo que Carga de Data (funciona igual para turnos que cruzan medianoche, sin depender de un horario fijo de corte).</p>
+  <p class="lead">Entrada = primer checado de la sesión, Salida = último — se agrupan mientras el rango total no rebase lo que dura un turno real (tope de 13h), así que un checado de comedor/descanso a media sesión no la corta, pero un rango imposible (16h+) sí indica que en realidad son dos turnos distintos, típico de un cruce nocturno.</p>
 
   <div class="reg-filtros">
     <div class="reg-campo">
@@ -980,33 +980,39 @@ function cdSemanaISO(d){
 /* ============================================================
  * AGRUPACIÓN POR SESIÓN (turno-agnóstica)
  * ------------------------------------------------------------
- * En vez de asumir un horario fijo de corte (que solo funciona
- * para nocturno), se agrupan los checados de cada colaborador
- * en "sesiones de trabajo": una sesión termina cuando el hueco
- * entre dos checados consecutivos supera GAP_HORAS (tiempo de
- * descanso real entre turnos). Esto funciona igual para diurno,
- * vespertino y nocturno sin tener que adivinar el turno primero.
+ * Criterio: ninguna sesión de trabajo puede durar más de
+ * LIMITE_MAX_HORAS (nadie labora más de ~12h reales, dejamos
+ * margen a 13h). Desde la primera checada de una sesión, se van
+ * sumando checadas mientras sigan cayendo dentro de esa ventana
+ * máxima; la última que cae dentro de la ventana es la Salida.
+ * En cuanto una checada se pasa del tope, empieza sesión nueva.
+ *
+ * Esto (y no un hueco fijo entre checadas) es lo que distingue
+ * un día normal con un checado intermedio de comedor/descanso
+ * (el hueco puede ser de varias horas y sigue siendo la MISMA
+ * sesión) de un cruce real de turno nocturno (el primer checado
+ * del día es en realidad el cierre de la noche anterior, y el
+ * turno de esa noche empieza más tarde ese mismo día).
  * ============================================================ */
-const GAP_HORAS = 5;
+const LIMITE_MAX_HORAS = 13;
 
 function agruparEnSesiones(registrosOrdenados){
   const sesiones = [];
-  let actual = null;
-  registrosOrdenados.forEach(r => {
-    if (!actual) {
-      actual = { entrada: r.dt, salida: r.dt, registros: [r] };
-    } else {
-      const gapHoras = (r.dt - actual.salida) / 3600000;
-      if (gapHoras >= GAP_HORAS) {
-        sesiones.push(actual);
-        actual = { entrada: r.dt, salida: r.dt, registros: [r] };
-      } else {
-        actual.salida = r.dt;
-        actual.registros.push(r);
-      }
+  let i = 0;
+  const n = registrosOrdenados.length;
+  while (i < n) {
+    const entrada = registrosOrdenados[i];
+    let j = i;
+    while (j + 1 < n && (registrosOrdenados[j + 1].dt - entrada.dt) / 3600000 <= LIMITE_MAX_HORAS) {
+      j++;
     }
-  });
-  if (actual) sesiones.push(actual);
+    sesiones.push({
+      entrada: entrada.dt,
+      salida: registrosOrdenados[j].dt,
+      registros: registrosOrdenados.slice(i, j + 1),
+    });
+    i = j + 1;
+  }
   return sesiones;
 }
 
