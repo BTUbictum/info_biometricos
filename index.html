@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v29]</title>
+<title>Biométricos Colaboradores | Ubictum [v30]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -476,12 +476,11 @@
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v29</span>
+  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v30</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
   <h1>Registros</h1>
-  <p class="lead">Consulta directa sobre RegBio26 — al abrir muestra la fecha más reciente cargada.</p>
 
   <div class="reg-filtros">
     <div class="reg-campo">
@@ -548,7 +547,6 @@
 
 <div class="tabpanel" id="tab-carga">
   <h1>Carga de Data a SharePoint</h1>
-  <p class="lead">Sube el mismo excel crudo del biométrico — se filtra, se calcula Turno Efectivo/Semana/Facilitador/Líder, se valida contra duplicados por Llave, y se inserta solo lo nuevo en RegBio26.</p>
 
   <div class="steps">
     <button class="step active" id="cdStep1" type="button"><span class="num">1</span>Subir excel</button>
@@ -571,18 +569,10 @@
     <button class="cd-btn" id="cdBtnSubir" type="button">Subir a SharePoint</button>
     <div class="cd-log" id="cdLog" style="margin-top:14px;"></div>
   </div>
-
-  <div class="card" style="margin-top:24px; border-color:#e0a; background:#fff5f5;">
-    <p style="font-weight:700; color:#8a1f1f; margin-bottom:6px;">⚠ Utilidad de pruebas — vaciar RegBio26</p>
-    <p style="font-size:13px; color:#5a3a3a; margin-bottom:12px;">Borra TODOS los renglones de la lista RegBio26 vía API (rápido, no depende de la vista de cuadrícula de SharePoint). Úsalo solo mientras seguimos probando la carga — pide confirmación antes de borrar.</p>
-    <button class="cd-btn" id="cdBtnVaciar" type="button" style="background:#b3413f;">Vaciar RegBio26</button>
-    <div class="cd-log" id="cdLogVaciar" style="margin-top:14px; display:none;"></div>
-  </div>
 </div><!-- /tab-carga -->
 
 <div class="tabpanel" id="tab-dia">
   <h1>Registros por Día</h1>
-  <p class="lead">Entrada = primer checado de la sesión, Salida = último — se agrupan mientras el rango total no rebase lo que dura un turno real (tope de 13h), así que un checado de comedor/descanso a media sesión no la corta, pero un rango imposible (16h+) sí indica que en realidad son dos turnos distintos, típico de un cruce nocturno.</p>
 
   <div class="reg-filtros">
     <div class="reg-campo">
@@ -649,7 +639,6 @@
 
 <div class="tabpanel" id="tab-semana">
   <h1>Registros por Semana</h1>
-  <p class="lead">Entrada-Salida de cada día en la misma celda. Turno/Área de la fila = el que más días tuvo esa semana (empate → el primer día de la semana).</p>
 
   <div class="reg-filtros">
     <div class="reg-campo">
@@ -1397,91 +1386,6 @@ document.getElementById('cdBtnSubir').addEventListener('click', async () => {
   }
 });
 
-/* ============================================================
- * UTILIDAD DE PRUEBAS — vaciar RegBio26
- * ============================================================ */
-function cdLogVaciar(msg){
-  const el = document.getElementById('cdLogVaciar');
-  el.style.display = 'block';
-  el.textContent += msg + '\n';
-  el.scrollTop = el.scrollHeight;
-}
-
-async function eliminarLoteConReintentos(token, ids, lote, intento = 1){
-  const MAX_INTENTOS = 8;
-  const body = {
-    requests: lote.map((itemId, j) => ({
-      id: String(j + 1),
-      method: 'DELETE',
-      url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items/${itemId}`,
-    })),
-  };
-  let resp;
-  try {
-    resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
-  } catch (e) {
-    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
-      const espera = 1000 * Math.pow(2, intento);
-      cdLogVaciar(`Límite de ritmo, reintentando lote en ${espera/1000}s…`);
-      await cdEsperar(espera);
-      return eliminarLoteConReintentos(token, ids, lote, intento + 1);
-    }
-    return { eliminados: 0, errores: lote.length };
-  }
-  let eliminados = 0, errores = 0;
-  const pendientesDe429 = [];
-  resp.responses.forEach(r => {
-    if (r.status >= 200 && r.status < 300) eliminados++;
-    else if (r.status === 429) pendientesDe429.push(lote[parseInt(r.id, 10) - 1]);
-    else errores++;
-  });
-  if (pendientesDe429.length && intento < MAX_INTENTOS) {
-    const espera = 1000 * Math.pow(2, intento);
-    await cdEsperar(espera);
-    const reintento = await eliminarLoteConReintentos(token, ids, pendientesDe429, intento + 1);
-    eliminados += reintento.eliminados; errores += reintento.errores;
-  } else {
-    errores += pendientesDe429.length;
-  }
-  return { eliminados, errores };
-}
-
-document.getElementById('cdBtnVaciar').addEventListener('click', async () => {
-  const total1 = prompt('Esto borra TODOS los renglones de RegBio26 y no se puede deshacer.\nEscribe VACIAR para confirmar:');
-  if (total1 !== 'VACIAR') return;
-
-  const btn = document.getElementById('cdBtnVaciar');
-  btn.disabled = true;
-  document.getElementById('cdLogVaciar').textContent = '';
-  document.getElementById('cdLogVaciar').style.display = 'block';
-  try {
-    const token = await obtenerTokenGraph();
-    const ids = await resolverGraphIds(token);
-
-    cdLogVaciar('Obteniendo todos los IDs de renglones…');
-    const items = await graphFetchAll(
-      `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?$select=id&$top=2000`, token
-    );
-    const idsRenglones = items.map(it => it.id);
-    cdLogVaciar(`${idsRenglones.length} renglones encontrados. Borrando…`);
-
-    let eliminados = 0, errores = 0;
-    const TAM_LOTE = 20;
-    for (let i = 0; i < idsRenglones.length; i += TAM_LOTE) {
-      const lote = idsRenglones.slice(i, i + TAM_LOTE);
-      const res = await eliminarLoteConReintentos(token, ids, lote);
-      eliminados += res.eliminados; errores += res.errores;
-      cdLogVaciar(`Progreso: ${Math.min(i + TAM_LOTE, idsRenglones.length)}/${idsRenglones.length}`);
-      if (i + TAM_LOTE < idsRenglones.length) await cdEsperar(350);
-    }
-    cdLogVaciar(`Listo. ${eliminados} eliminados, ${errores} errores.`);
-  } catch (err) {
-    console.error(err);
-    cdLogVaciar('ERROR: ' + err.message);
-  } finally {
-    btn.disabled = false;
-  }
-});
 
 /* ============================================================
  * PESTAÑA REGISTROS — consulta directa sobre RegBio26
