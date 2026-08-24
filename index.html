@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v36]</title>
+<title>Biométricos Colaboradores | Ubictum [v37]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -480,7 +480,7 @@
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v36</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v37</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -664,6 +664,13 @@
       <div class="cd-box"><div class="n" id="catErrores">0</div><div class="l">Errores</div></div>
     </div>
     <div class="cd-log" id="catLog" style="margin-top:14px; display:none;"></div>
+  </div>
+
+  <div class="card" style="margin-top:24px; border-color:#e0a; background:#fff5f5;">
+    <p style="font-weight:700; color:#8a1f1f; margin-bottom:6px;">⚠ Utilidad temporal — vaciar RegBio26</p>
+    <p style="font-size:13px; color:#5a3a3a; margin-bottom:12px;">Borra TODOS los renglones de la lista RegBio26 vía API (rápido, no depende de la vista de cuadrícula de SharePoint). Úsala para el reinicio de esta semana y luego avísame para quitarla de nuevo. Pide confirmación antes de borrar.</p>
+    <button class="cd-btn" id="cdBtnVaciar" type="button" style="background:#b3413f;">Vaciar RegBio26</button>
+    <div class="cd-log" id="cdLogVaciar" style="margin-top:14px; display:none;"></div>
   </div>
 </div><!-- /tab-carga -->
 
@@ -2505,6 +2512,92 @@ document.getElementById('catFileInput').addEventListener('change', async (e) => 
   } finally {
     btn.disabled = false;
     document.getElementById('catFileInput').value = '';
+  }
+});
+
+/* ============================================================
+ * UTILIDAD TEMPORAL — vaciar RegBio26
+ * ============================================================ */
+function cdLogVaciar(msg){
+  const el = document.getElementById('cdLogVaciar');
+  el.style.display = 'block';
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+async function eliminarLoteConReintentos(token, ids, lote, intento = 1){
+  const MAX_INTENTOS = 8;
+  const body = {
+    requests: lote.map((itemId, j) => ({
+      id: String(j + 1),
+      method: 'DELETE',
+      url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items/${itemId}`,
+    })),
+  };
+  let resp;
+  try {
+    resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
+  } catch (e) {
+    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
+      const espera = 1000 * Math.pow(2, intento);
+      cdLogVaciar(`Límite de ritmo, reintentando lote en ${espera/1000}s…`);
+      await cdEsperar(espera);
+      return eliminarLoteConReintentos(token, ids, lote, intento + 1);
+    }
+    return { eliminados: 0, errores: lote.length };
+  }
+  let eliminados = 0, errores = 0;
+  const pendientesDe429 = [];
+  resp.responses.forEach(r => {
+    if (r.status >= 200 && r.status < 300) eliminados++;
+    else if (r.status === 429) pendientesDe429.push(lote[parseInt(r.id, 10) - 1]);
+    else errores++;
+  });
+  if (pendientesDe429.length && intento < MAX_INTENTOS) {
+    const espera = 1000 * Math.pow(2, intento);
+    await cdEsperar(espera);
+    const reintento = await eliminarLoteConReintentos(token, ids, pendientesDe429, intento + 1);
+    eliminados += reintento.eliminados; errores += reintento.errores;
+  } else {
+    errores += pendientesDe429.length;
+  }
+  return { eliminados, errores };
+}
+
+document.getElementById('cdBtnVaciar').addEventListener('click', async () => {
+  const confirmacion = prompt('Esto borra TODOS los renglones de RegBio26 y no se puede deshacer.\nEscribe VACIAR para confirmar:');
+  if (confirmacion !== 'VACIAR') return;
+
+  const btn = document.getElementById('cdBtnVaciar');
+  btn.disabled = true;
+  document.getElementById('cdLogVaciar').textContent = '';
+  document.getElementById('cdLogVaciar').style.display = 'block';
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+
+    cdLogVaciar('Obteniendo todos los IDs de renglones…');
+    const items = await graphFetchAll(
+      `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?$select=id&$top=2000`, token
+    );
+    const idsRenglones = items.map(it => it.id);
+    cdLogVaciar(`${idsRenglones.length} renglones encontrados. Borrando…`);
+
+    let eliminados = 0, errores = 0;
+    const TAM_LOTE = 20;
+    for (let i = 0; i < idsRenglones.length; i += TAM_LOTE) {
+      const lote = idsRenglones.slice(i, i + TAM_LOTE);
+      const res = await eliminarLoteConReintentos(token, ids, lote);
+      eliminados += res.eliminados; errores += res.errores;
+      cdLogVaciar(`Progreso: ${Math.min(i + TAM_LOTE, idsRenglones.length)}/${idsRenglones.length}`);
+      if (i + TAM_LOTE < idsRenglones.length) await cdEsperar(500);
+    }
+    cdLogVaciar(`Listo. ${eliminados} eliminados, ${errores} errores.`);
+  } catch (err) {
+    console.error(err);
+    cdLogVaciar('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
   }
 });
 </script>
