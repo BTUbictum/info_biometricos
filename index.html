@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v30]</title>
+<title>Biométricos Colaboradores | Ubictum [v32]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -374,6 +374,8 @@
   }
   thead.thead-azul th{ background: var(--azul); }
   thead.thead-gris th{ background: var(--gris); }
+  thead.thead-blanco th{ background: #fff; color: #3475a7; border-bottom: 2px solid #3475a7; }
+  .bio-horas{ display: flex; flex-direction: column; gap: 2px; white-space: normal; }
   tbody td{
     padding: 8px 10px;
     border-bottom: 1px solid var(--gris-line);
@@ -475,8 +477,9 @@
   <button class="tabbtn active" data-tab="registros" type="button">Registros</button>
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
-  <button class="tabbtn" data-tab="carga" type="button">Carga de Data</button>
-  <span style="margin-left:auto;align-self:center;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v30</span>
+  <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
+  <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v32</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -544,6 +547,75 @@
     <p class="table-note" id="regTableNote"></p>
   </div>
 </div><!-- /tab-registros -->
+
+<div class="tabpanel" id="tab-biometrico">
+  <h1>Registros por Biométrico</h1>
+
+  <div class="reg-filtros">
+    <div class="reg-campo">
+      <label>Fecha desde</label>
+      <input type="date" id="bioFechaDesde">
+    </div>
+    <div class="reg-campo">
+      <label>Fecha hasta</label>
+      <input type="date" id="bioFechaHasta">
+    </div>
+    <div class="reg-campo">
+      <label>ID Colaborador</label>
+      <input type="text" id="bioFiltroId" placeholder="Ej. 100357">
+    </div>
+    <div class="reg-campo">
+      <label>Nombre</label>
+      <input type="text" id="bioFiltroNombre" placeholder="Buscar por nombre">
+    </div>
+    <div class="reg-campo">
+      <label>Turno</label>
+      <select id="bioFiltroTurno"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Área</label>
+      <select id="bioFiltroArea"><option value="">Todas</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Facilitador</label>
+      <select id="bioFiltroFacilitador"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Líder</label>
+      <select id="bioFiltroLider"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo reg-botones">
+      <button class="cd-btn" id="bioBtnBuscar" type="button">Buscar</button>
+      <button class="ghost" id="bioBtnLimpiar" type="button">Limpiar filtros</button>
+    </div>
+  </div>
+
+  <div class="status-row">
+    <span class="status" id="bioStatus"></span>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead class="thead-blanco">
+          <tr id="bioHeaderRow">
+            <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th><th>Fecha</th>
+            <th>Facilitador</th><th>Líder</th>
+            <th>Door_Panorama Oficina</th><th>Door_Panorama Comedor</th>
+            <th>Área 3PL</th><th>Área Acomodo</th><th>Área CADMAN</th><th>Área Embarques</th>
+            <th>Área Recibo</th><th>Área Surtido</th>
+            <th>UBI2 Almacén a comedor Afuera</th><th>UBI2 Asistencia almacén</th>
+            <th>UBI2 Vestidores hombres Adentro</th><th>UBI2 Vestidores hombres Afuera</th>
+            <th>UBI2 Vestidores mujeres Adentro</th><th>UBI2 Vestidores mujeres Afuera</th>
+            <th>Ubictum Area Descanso Entrada</th><th>Ubictum Area Descanso Salida</th>
+          </tr>
+        </thead>
+        <tbody id="bioTbody"></tbody>
+      </table>
+    </div>
+    <p class="table-note" id="bioTableNote"></p>
+  </div>
+</div><!-- /tab-biometrico -->
 
 <div class="tabpanel" id="tab-carga">
   <h1>Carga de Data a SharePoint</h1>
@@ -848,6 +920,7 @@ document.getElementById('tabbar').addEventListener('click', (e) => {
   document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
   if (btn.dataset.tab === 'dia' && typeof inicializarDia === 'function') inicializarDia();
   if (btn.dataset.tab === 'semana' && typeof inicializarSemana === 'function') inicializarSemana();
+  if (btn.dataset.tab === 'biometrico' && typeof inicializarBiometrico === 'function') inicializarBiometrico();
 });
 
 /* ============================================================
@@ -1984,6 +2057,210 @@ document.getElementById('semBtnLimpiar').addEventListener('click', () => {
 });
 ['semFiltroId','semFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', semRenderTabla));
 ['semFiltroTurno','semFiltroArea','semFiltroBiometrico','semFiltroFacilitador','semFiltroLider'].forEach(id => document.getElementById(id).addEventListener('change', semRenderTabla));
+
+/* ============================================================
+ * PESTAÑA REGISTROS POR BIOMÉTRICO
+ * ------------------------------------------------------------
+ * Misma agrupación por sesión que Registros por Día/Semana — el
+ * "día" reportado es el de la Salida (con respaldo en Entrada si
+ * aún no hay salida real). Todos los checados de la sesión caen
+ * bajo ESE día, repartidos en la columna del biométrico donde
+ * ocurrió cada uno. Si hay varios checados en el mismo biométrico
+ * el mismo día, se apilan uno debajo del otro en la misma celda.
+ * ============================================================ */
+const BIOMETRICOS_ORDEN = [
+  'Door_Panorama Oficina', 'Door_Panorama Comedor',
+  'Área 3PL', 'Área Acomodo', 'Área CADMAN', 'Área Embarques', 'Área Recibo', 'Área Surtido',
+  'UBI2 Almacén a comedor Afuera', 'UBI2 Asistencia almacén',
+  'UBI2 Vestidores hombres Adentro', 'UBI2 Vestidores hombres Afuera',
+  'UBI2 Vestidores mujeres Adentro', 'UBI2 Vestidores mujeres Afuera',
+  'Ubictum Area Descanso Entrada', 'Ubictum Area Descanso Salida',
+];
+
+let bioInicializado = false;
+let bioValoresParaDropdown = [];
+let bioFilasDatos = [];
+
+async function inicializarBiometrico(){
+  if (bioInicializado) return;
+  bioInicializado = true;
+  const status = document.getElementById('bioStatus');
+  try {
+    status.textContent = 'Cargando…';
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+
+    const campoFecha = regCamposMapa['Fecha'] || 'Fecha';
+    const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campoFecha})&$orderby=fields/${campoFecha} desc&$top=1`;
+    const data = await graphFetch(url, token);
+    if (data.value && data.value.length) {
+      const fechaMax = data.value[0].fields[campoFecha].slice(0, 10);
+      document.getElementById('bioFechaDesde').value = fechaMax;
+      document.getElementById('bioFechaHasta').value = fechaMax;
+    }
+    await bioBuscar();
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al inicializar: ' + err.message;
+  }
+}
+
+async function bioBuscar(){
+  const status = document.getElementById('bioStatus');
+  try {
+    const desdeStr = document.getElementById('bioFechaDesde').value;
+    const hastaStr = document.getElementById('bioFechaHasta').value;
+    if (!desdeStr || !hastaStr) { status.textContent = 'Elige un rango de fechas.'; return; }
+
+    status.textContent = 'Consultando…';
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+    const c = (n) => regCamposMapa[n] || n;
+
+    // Margen de 1 día de cada lado para no cortar sesiones nocturnas en el borde.
+    const unDiaMs = 24 * 60 * 60 * 1000;
+    const desdeAmpliado = new Date(new Date(desdeStr + 'T00:00:00Z').getTime() - unDiaMs).toISOString();
+    const hastaAmpliado = new Date(new Date(hastaStr + 'T00:00:00Z').getTime() + unDiaMs).toISOString();
+
+    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider']
+      .map(n => c(n)).join(',');
+    const filtro = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
+    const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtro}&$top=5000`;
+
+    const items = await graphFetchAll(url, token);
+    const crudos = items.map(it => {
+      const f = it.fields;
+      const fecha = (f[c('Fecha')] || '').slice(0, 10);
+      const hora = f[c('Hora')] || '00:00:00';
+      return {
+        idColab: f[c('IDColab')] || '',
+        nombre: f[c('Nombre')] || '',
+        turno: f[c('TurnoAsignado')] || '',
+        area: f[c('Area')] || '',
+        biometrico: f[c('Biometrico')] || '',
+        fecha, hora,
+        facilitador: f[c('Facilitador')] || '',
+        lider: f[c('Lider')] || '',
+        dt: new Date(fecha + 'T' + hora + 'Z'),
+      };
+    });
+    bioValoresParaDropdown = crudos;
+
+    const porColab = new Map();
+    crudos.forEach(r => {
+      if (!porColab.has(r.idColab)) porColab.set(r.idColab, []);
+      porColab.get(r.idColab).push(r);
+    });
+
+    const filas = [];
+    porColab.forEach(registros => {
+      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const sesiones = agruparEnSesiones(ordenados);
+      sesiones.forEach(sesion => {
+        const entrada = sesion.registros[0];
+        const salida = sesion.registros[sesion.registros.length - 1];
+        const hayRealSalida = sesion.registros.length > 1;
+        const fechaReportada = hayRealSalida ? salida.fecha : entrada.fecha;
+        if (fechaReportada < desdeStr || fechaReportada > hastaStr) return;
+
+        // Reparte cada checado de la sesión en su columna de biométrico.
+        const porBiometrico = {};
+        sesion.registros.forEach(r => {
+          const key = r.biometrico;
+          if (!porBiometrico[key]) porBiometrico[key] = [];
+          porBiometrico[key].push(r.hora.slice(0,5));
+        });
+
+        filas.push({
+          idColab: entrada.idColab,
+          nombre: entrada.nombre,
+          turno: entrada.turno,
+          area: entrada.area,
+          fecha: fechaReportada,
+          facilitador: entrada.facilitador,
+          lider: entrada.lider,
+          porBiometrico,
+        });
+      });
+    });
+
+    bioFilasDatos = filas;
+    bioActualizarOpcionesDropdown();
+    bioRenderTabla();
+    status.textContent = '';
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al consultar: ' + err.message;
+  }
+}
+
+function bioActualizarOpcionesDropdown(){
+  const campos = [
+    ['bioFiltroTurno', 'turno'], ['bioFiltroArea', 'area'],
+    ['bioFiltroFacilitador', 'facilitador'], ['bioFiltroLider', 'lider'],
+  ];
+  campos.forEach(([selectId, key]) => {
+    const select = document.getElementById(selectId);
+    const valorActual = select.value;
+    const valores = [...new Set(bioValoresParaDropdown.map(r => r[key]).filter(Boolean))].sort();
+    select.innerHTML = `<option value="">${select.options[0].textContent}</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.value = valorActual;
+  });
+}
+
+function bioRenderTabla(){
+  const tbody = document.getElementById('bioTbody');
+  const note = document.getElementById('bioTableNote');
+
+  const idQ = document.getElementById('bioFiltroId').value.trim().toLowerCase();
+  const nombreQ = document.getElementById('bioFiltroNombre').value.trim().toLowerCase();
+  const turnoQ = document.getElementById('bioFiltroTurno').value;
+  const areaQ = document.getElementById('bioFiltroArea').value;
+  const facilitadorQ = document.getElementById('bioFiltroFacilitador').value;
+  const liderQ = document.getElementById('bioFiltroLider').value;
+
+  const filtradas = bioFilasDatos.filter(r =>
+    (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
+    (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
+    (!turnoQ || r.turno === turnoQ) &&
+    (!areaQ || r.area === areaQ) &&
+    (!facilitadorQ || r.facilitador === facilitadorQ) &&
+    (!liderQ || r.lider === liderQ)
+  ).sort((a, b) => a.idColab.localeCompare(b.idColab) || a.fecha.localeCompare(b.fecha));
+
+  const LIMITE_VISTA = 1000;
+  tbody.innerHTML = '';
+  filtradas.slice(0, LIMITE_VISTA).forEach(r => {
+    const tr = document.createElement('tr');
+    const celdasBiometrico = BIOMETRICOS_ORDEN.map(nombreBio => {
+      const horas = r.porBiometrico[nombreBio];
+      if (!horas || !horas.length) return '<td></td>';
+      return `<td><div class="bio-horas">${horas.map(h => `<span>${h}</span>`).join('')}</div></td>`;
+    }).join('');
+    tr.innerHTML = `
+      <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno}</td><td>${r.area}</td><td>${r.fecha}</td>
+      <td>${r.facilitador}</td><td>${r.lider}</td>
+      ${celdasBiometrico}
+    `;
+    tbody.appendChild(tr);
+  });
+
+  note.textContent = filtradas.length > LIMITE_VISTA
+    ? `Mostrando las primeras ${LIMITE_VISTA} de ${filtradas.length} filas que cumplen el filtro.`
+    : `${filtradas.length} fila(s).`;
+}
+
+document.getElementById('bioBtnBuscar').addEventListener('click', bioBuscar);
+document.getElementById('bioBtnLimpiar').addEventListener('click', () => {
+  ['bioFiltroId','bioFiltroNombre'].forEach(id => document.getElementById(id).value = '');
+  ['bioFiltroTurno','bioFiltroArea','bioFiltroFacilitador','bioFiltroLider'].forEach(id => document.getElementById(id).value = '');
+  bioRenderTabla();
+});
+['bioFiltroId','bioFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', bioRenderTabla));
+['bioFiltroTurno','bioFiltroArea','bioFiltroFacilitador','bioFiltroLider'].forEach(id => document.getElementById(id).addEventListener('change', bioRenderTabla));
 </script>
 
 </body>
