@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v37]</title>
+<title>Biométricos Colaboradores | Ubictum [v38]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -480,7 +480,7 @@
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v37</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v38</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -608,8 +608,8 @@
       <table>
         <thead class="thead-blanco">
           <tr id="bioHeaderRow">
-            <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th><th>Fecha</th>
-            <th>Facilitador</th><th>Líder</th><th>Jornada</th>
+            <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th><th>Fecha</th><th>Jornada</th>
+            <th>Facilitador</th><th>Líder</th>
             <th>Área 3PL</th><th>Área Acomodo</th><th>Área CADMAN</th><th>Área Embarques</th>
             <th>Área Recibo</th><th>Área Surtido</th>
             <th>Door_Panorama Oficina</th><th>Door_Panorama Comedor</th>
@@ -2302,8 +2302,8 @@ function bioRenderTabla(){
       return `<td><div class="bio-horas">${horas.map(h => `<span>${h}</span>`).join('')}</div></td>`;
     }).join('');
     tr.innerHTML = `
-      <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno}</td><td>${r.area}</td><td>${r.fecha}</td>
-      <td>${r.facilitador}</td><td>${r.lider}</td><td>${r.jornada}</td>
+      <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno}</td><td>${r.area}</td><td>${r.fecha}</td><td>${r.jornada}</td>
+      <td>${r.facilitador}</td><td>${r.lider}</td>
       ${celdasBiometrico}
     `;
     tbody.appendChild(tr);
