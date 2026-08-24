@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v34]</title>
+<title>Biométricos Colaboradores | Ubictum [v35]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -374,7 +374,8 @@
   }
   thead.thead-azul th{ background: var(--azul); }
   thead.thead-gris th{ background: var(--gris); }
-  thead.thead-blanco th{ background: #3475a7; color: #fff; }
+  thead.thead-blanco th{ background: #3475a7; color: #fff; border-right: 1px solid rgba(255,255,255,.25); }
+  thead.thead-blanco th:last-child{ border-right: none; }
   .bio-horas{ display: flex; flex-direction: column; gap: 2px; white-space: normal; }
   tbody td{
     padding: 8px 10px;
@@ -479,7 +480,7 @@
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v34</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v35</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
