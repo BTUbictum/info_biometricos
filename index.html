@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v32]</title>
+<title>Biométricos Colaboradores | Ubictum [v34]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -374,7 +374,7 @@
   }
   thead.thead-azul th{ background: var(--azul); }
   thead.thead-gris th{ background: var(--gris); }
-  thead.thead-blanco th{ background: #fff; color: #3475a7; border-bottom: 2px solid #3475a7; }
+  thead.thead-blanco th{ background: #3475a7; color: #fff; }
   .bio-horas{ display: flex; flex-direction: column; gap: 2px; white-space: normal; }
   tbody td{
     padding: 8px 10px;
@@ -479,7 +479,7 @@
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v32</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v34</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -601,10 +601,10 @@
           <tr id="bioHeaderRow">
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th><th>Fecha</th>
             <th>Facilitador</th><th>Líder</th>
-            <th>Door_Panorama Oficina</th><th>Door_Panorama Comedor</th>
             <th>Área 3PL</th><th>Área Acomodo</th><th>Área CADMAN</th><th>Área Embarques</th>
             <th>Área Recibo</th><th>Área Surtido</th>
-            <th>UBI2 Almacén a comedor Afuera</th><th>UBI2 Asistencia almacén</th>
+            <th>Door_Panorama Oficina</th><th>Door_Panorama Comedor</th>
+            <th>UBI2 Asistencia almacén</th><th>UBI2 Almacén a comedor Afuera</th>
             <th>UBI2 Vestidores hombres Adentro</th><th>UBI2 Vestidores hombres Afuera</th>
             <th>UBI2 Vestidores mujeres Adentro</th><th>UBI2 Vestidores mujeres Afuera</th>
             <th>Ubictum Area Descanso Entrada</th><th>Ubictum Area Descanso Salida</th>
@@ -2069,9 +2069,9 @@ document.getElementById('semBtnLimpiar').addEventListener('click', () => {
  * el mismo día, se apilan uno debajo del otro en la misma celda.
  * ============================================================ */
 const BIOMETRICOS_ORDEN = [
-  'Door_Panorama Oficina', 'Door_Panorama Comedor',
   'Área 3PL', 'Área Acomodo', 'Área CADMAN', 'Área Embarques', 'Área Recibo', 'Área Surtido',
-  'UBI2 Almacén a comedor Afuera', 'UBI2 Asistencia almacén',
+  'Door_Panorama Oficina', 'Door_Panorama Comedor',
+  'UBI2 Asistencia almacén', 'UBI2 Almacén a comedor Afuera',
   'UBI2 Vestidores hombres Adentro', 'UBI2 Vestidores hombres Afuera',
   'UBI2 Vestidores mujeres Adentro', 'UBI2 Vestidores mujeres Afuera',
   'Ubictum Area Descanso Entrada', 'Ubictum Area Descanso Salida',
