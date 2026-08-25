@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v40]</title>
+<title>Biométricos Colaboradores | Ubictum [v41]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -390,7 +390,7 @@
   .sem-hora-doble{ display: flex; flex-direction: column; line-height: 1.5; }
   .inc-combo{
     padding:5px 4px; border:1px solid #dde3e4; border-radius:5px;
-    font-size:12px; font-family:'Inter', sans-serif; background:#fff8e6;
+    font-size:12px; font-family:'Inter', sans-serif; background:#f0f2f3;
   }
   .inc-codigo-bloqueado{
     display:inline-block; padding:2px 8px; border-radius:4px;
@@ -491,7 +491,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v40</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v41</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -692,10 +692,6 @@
       <select id="diaFiltroArea"><option value="">Todas</option></select>
     </div>
     <div class="reg-campo">
-      <label>Biométrico</label>
-      <select id="diaFiltroBiometrico"><option value="">Todos</option></select>
-    </div>
-    <div class="reg-campo">
       <label>Facilitador</label>
       <select id="diaFiltroFacilitador"><option value="">Todos</option></select>
     </div>
@@ -763,10 +759,6 @@
       <select id="incFiltroArea"><option value="">Todas</option></select>
     </div>
     <div class="reg-campo">
-      <label>Biométrico</label>
-      <select id="incFiltroBiometrico"><option value="">Todos</option></select>
-    </div>
-    <div class="reg-campo">
       <label>Facilitador</label>
       <select id="incFiltroFacilitador"><option value="">Todos</option></select>
     </div>
@@ -781,16 +773,13 @@
     <div class="reg-campo reg-botones">
       <button class="cd-btn" id="incBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="incBtnLimpiar" type="button">Limpiar filtros</button>
+      <button class="cd-btn" id="incBtnCerrar" type="button" style="margin-left:14px;">Cerrar Semana</button>
+      <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
     </div>
   </div>
 
   <div class="status-row">
     <span class="status" id="incStatus"></span>
-  </div>
-
-  <div style="display:flex; gap:10px; margin:14px 0;">
-    <button class="cd-btn" id="incBtnCerrar" type="button">Cerrar Semana</button>
-    <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
   </div>
 
   <div class="card">
@@ -838,10 +827,6 @@
     <div class="reg-campo">
       <label>Área</label>
       <select id="semFiltroArea"><option value="">Todas</option></select>
-    </div>
-    <div class="reg-campo">
-      <label>Biométrico</label>
-      <select id="semFiltroBiometrico"><option value="">Todos</option></select>
     </div>
     <div class="reg-campo">
       <label>Facilitador</label>
@@ -1184,6 +1169,7 @@ async function cargarCatalogos(token, ids){
         facilitador: f[cc('Facilitador')] || '',
         lider: f[cc('Lider')] || '',
         jornada: f[cc('Jornada')] || '',
+        descansos: f[cc('Descansos')] || '',
       });
     }
   });
@@ -1697,7 +1683,6 @@ function regRenderTabla(){
     (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
     (!turnoQ || r.turno === turnoQ) &&
     (!areaQ || r.area === areaQ) &&
-    (!biometricoQ || r.biometrico === biometricoQ) &&
     (!facilitadorQ || r.facilitador === facilitadorQ) &&
     (!liderQ || r.lider === liderQ) &&
     (!jornadaQ || r.jornada === jornadaQ)
@@ -1880,7 +1865,7 @@ async function diaBuscar(){
 
 function diaActualizarOpcionesDropdown(){
   const campos = [
-    ['diaFiltroTurno', 'turno'], ['diaFiltroArea', 'area'], ['diaFiltroBiometrico', 'biometrico'],
+    ['diaFiltroTurno', 'turno'], ['diaFiltroArea', 'area'],
     ['diaFiltroFacilitador', 'facilitador'], ['diaFiltroLider', 'lider'], ['diaFiltroJornada', 'jornada'],
   ];
   campos.forEach(([selectId, key]) => {
@@ -1901,7 +1886,6 @@ function diaRenderTabla(){
   const nombreQ = document.getElementById('diaFiltroNombre').value.trim().toLowerCase();
   const turnoQ = document.getElementById('diaFiltroTurno').value;
   const areaQ = document.getElementById('diaFiltroArea').value;
-  const biometricoQ = document.getElementById('diaFiltroBiometrico').value;
   const facilitadorQ = document.getElementById('diaFiltroFacilitador').value;
   const liderQ = document.getElementById('diaFiltroLider').value;
   const jornadaQ = document.getElementById('diaFiltroJornada').value;
@@ -1911,7 +1895,6 @@ function diaRenderTabla(){
     (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
     (!turnoQ || r.turno === turnoQ) &&
     (!areaQ || r.area === areaQ) &&
-    (!biometricoQ || r.biometrico === biometricoQ) &&
     (!facilitadorQ || r.facilitador === facilitadorQ) &&
     (!liderQ || r.lider === liderQ) &&
     (!jornadaQ || r.jornada === jornadaQ)
@@ -1937,11 +1920,11 @@ function diaRenderTabla(){
 document.getElementById('diaBtnBuscar').addEventListener('click', diaBuscar);
 document.getElementById('diaBtnLimpiar').addEventListener('click', () => {
   ['diaFiltroId','diaFiltroNombre'].forEach(id => document.getElementById(id).value = '');
-  ['diaFiltroTurno','diaFiltroArea','diaFiltroBiometrico','diaFiltroFacilitador','diaFiltroLider','diaFiltroJornada'].forEach(id => document.getElementById(id).value = '');
+  ['diaFiltroTurno','diaFiltroArea','diaFiltroFacilitador','diaFiltroLider','diaFiltroJornada'].forEach(id => document.getElementById(id).value = '');
   diaRenderTabla();
 });
 ['diaFiltroId','diaFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', diaRenderTabla));
-['diaFiltroTurno','diaFiltroArea','diaFiltroBiometrico','diaFiltroFacilitador','diaFiltroLider','diaFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', diaRenderTabla));
+['diaFiltroTurno','diaFiltroArea','diaFiltroFacilitador','diaFiltroLider','diaFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', diaRenderTabla));
 
 /* ============================================================
  * PESTAÑA REGISTROS POR SEMANA
@@ -1954,6 +1937,7 @@ document.getElementById('diaBtnLimpiar').addEventListener('click', () => {
  * empate → el primer día de la semana (orden Lun→Dom).
  * ============================================================ */
 const DIAS_SEMANA = ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'];
+const DIA_CORTO_A_LARGO = { Lun:'Lunes', Mar:'Martes', Mie:'Miércoles', Jue:'Jueves', Vie:'Viernes', Sab:'Sábado', Dom:'Domingo' };
 let semInicializado = false;
 let semValoresParaDropdown = [];
 let diaSemanaFilas = [];
@@ -2125,7 +2109,7 @@ async function semBuscar(){
 
 function semActualizarOpcionesDropdown(){
   const campos = [
-    ['semFiltroTurno', 'turno'], ['semFiltroArea', 'area'], ['semFiltroBiometrico', 'biometrico'],
+    ['semFiltroTurno', 'turno'], ['semFiltroArea', 'area'],
     ['semFiltroFacilitador', 'facilitador'], ['semFiltroLider', 'lider'], ['semFiltroJornada', 'jornada'],
   ];
   campos.forEach(([selectId, key]) => {
@@ -2146,7 +2130,6 @@ function semRenderTabla(){
   const nombreQ = document.getElementById('semFiltroNombre').value.trim().toLowerCase();
   const turnoQ = document.getElementById('semFiltroTurno').value;
   const areaQ = document.getElementById('semFiltroArea').value;
-  const biometricoQ = document.getElementById('semFiltroBiometrico').value;
   const facilitadorQ = document.getElementById('semFiltroFacilitador').value;
   const liderQ = document.getElementById('semFiltroLider').value;
   const jornadaQ = document.getElementById('semFiltroJornada').value;
@@ -2156,7 +2139,6 @@ function semRenderTabla(){
     (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
     (!turnoQ || r.turno === turnoQ) &&
     (!areaQ || r.area === areaQ) &&
-    (!biometricoQ || r.biometricoValores.includes(biometricoQ)) &&
     (!facilitadorQ || r.facilitador === facilitadorQ) &&
     (!liderQ || r.lider === liderQ) &&
     (!jornadaQ || r.jornada === jornadaQ)
@@ -2179,11 +2161,11 @@ function semRenderTabla(){
 document.getElementById('semBtnBuscar').addEventListener('click', semBuscar);
 document.getElementById('semBtnLimpiar').addEventListener('click', () => {
   ['semFiltroId','semFiltroNombre'].forEach(id => document.getElementById(id).value = '');
-  ['semFiltroTurno','semFiltroArea','semFiltroBiometrico','semFiltroFacilitador','semFiltroLider','semFiltroJornada'].forEach(id => document.getElementById(id).value = '');
+  ['semFiltroTurno','semFiltroArea','semFiltroFacilitador','semFiltroLider','semFiltroJornada'].forEach(id => document.getElementById(id).value = '');
   semRenderTabla();
 });
 ['semFiltroId','semFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', semRenderTabla));
-['semFiltroTurno','semFiltroArea','semFiltroBiometrico','semFiltroFacilitador','semFiltroLider','semFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', semRenderTabla));
+['semFiltroTurno','semFiltroArea','semFiltroFacilitador','semFiltroLider','semFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', semRenderTabla));
 
 /* ============================================================
  * PESTAÑA REGISTROS POR BIOMÉTRICO
@@ -2485,6 +2467,7 @@ async function incBuscar(){
     const incRegMapa = await resolverCamposRegIncidencias(token, regIds);
     const ic = (n) => incRegMapa[n] || n;
     await cargarCatalogoIncidencias(token, regIds);
+    await cargarCatalogos(token, regIds); // asegura cdCatColab cargado (Descansos por colaborador)
 
     const unDiaMs = 24 * 60 * 60 * 1000;
     const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
@@ -2523,7 +2506,11 @@ async function incBuscar(){
     itemsInc.forEach(it => {
       const f = it.fields;
       const idColab = String(f[ic('IDColab')] || '').trim();
-      const fecha = (f[ic('Fecha')] || '').slice(0, 10);
+      // Se parsea vía Date (normalizado a UTC) en vez de recortar el string crudo:
+      // si Graph devuelve la fecha con offset de zona horaria en vez de "Z",
+      // un simple .slice(0,10) puede leer el día equivocado (un día antes).
+      const fechaRaw = f[ic('Fecha')];
+      const fecha = fechaRaw ? new Date(fechaRaw).toISOString().slice(0, 10) : '';
       if (!incCerradosMap.has(idColab)) incCerradosMap.set(idColab, new Map());
       incCerradosMap.get(idColab).set(fecha, {
         codigo: f[ic('Codigo')] || '',
@@ -2618,11 +2605,6 @@ function incActualizarOpcionesDropdown(){
       valores.map(v => `<option value="${v}">${v}</option>`).join('');
     select.value = valorActual;
   });
-  const selectBio = document.getElementById('incFiltroBiometrico');
-  const valorBio = selectBio.value;
-  const valoresBio = [...new Set(incValoresParaDropdown.map(r => r.biometrico).filter(Boolean))].sort();
-  selectBio.innerHTML = `<option value="">Todos</option>` + valoresBio.map(v => `<option value="${v}">${v}</option>`).join('');
-  selectBio.value = valorBio;
 }
 
 function incObtenerFiltradas(){
@@ -2630,7 +2612,6 @@ function incObtenerFiltradas(){
   const nombreQ = document.getElementById('incFiltroNombre').value.trim().toLowerCase();
   const turnoQ = document.getElementById('incFiltroTurno').value;
   const areaQ = document.getElementById('incFiltroArea').value;
-  const biometricoQ = document.getElementById('incFiltroBiometrico').value;
   const facilitadorQ = document.getElementById('incFiltroFacilitador').value;
   const liderQ = document.getElementById('incFiltroLider').value;
   const jornadaQ = document.getElementById('incFiltroJornada').value;
@@ -2640,7 +2621,6 @@ function incObtenerFiltradas(){
     (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
     (!turnoQ || r.turno === turnoQ) &&
     (!areaQ || r.area === areaQ) &&
-    (!biometricoQ || r.biometricoValores.includes(biometricoQ)) &&
     (!facilitadorQ || r.facilitador === facilitadorQ) &&
     (!liderQ || r.lider === liderQ) &&
     (!jornadaQ || r.jornada === jornadaQ)
@@ -2655,7 +2635,7 @@ function incRenderTabla(){
   tbody.innerHTML = '';
   filtradas.forEach(r => {
     const tr = document.createElement('tr');
-    const celdasDias = r.dias.map((d) => {
+    const celdasDias = r.dias.map((d, idx) => {
       if (d.modo === 'real') {
         const s = d.sesion;
         const texto = s.hayRealSalida
@@ -2671,8 +2651,15 @@ function incRenderTabla(){
         }
         return `<td><span class="inc-codigo-bloqueado">${reg.codigo}</span></td>`;
       }
+      // Por default F, salvo que ese día de la semana esté en los Descansos
+      // registrados del colaborador en CatColab — ahí default D.
+      const catColabInfo = cdCatColab ? cdCatColab.get(r.idColab) : null;
+      const diaLargo = DIA_CORTO_A_LARGO[DIAS_SEMANA[idx]];
+      const esDescanso = !!(catColabInfo && catColabInfo.descansos &&
+        catColabInfo.descansos.split('-').map(s => s.trim()).includes(diaLargo));
+      const codigoDefault = esDescanso ? 'D' : 'F';
       const opciones = (incCatalogoOpciones || []).map(o =>
-        `<option value="${o.code}" ${o.code === 'F' ? 'selected' : ''}>${o.code}</option>`
+        `<option value="${o.code}" ${o.code === codigoDefault ? 'selected' : ''}>${o.code}</option>`
       ).join('');
       return `<td><select class="inc-combo" data-idcolab="${r.idColab}" data-fecha="${d.fecha}">${opciones}</select></td>`;
     }).join('');
@@ -2730,11 +2717,11 @@ async function incEnviarLoteConReintentos(token, ids, lote, intento = 1){
 document.getElementById('incBtnBuscar').addEventListener('click', incBuscar);
 document.getElementById('incBtnLimpiar').addEventListener('click', () => {
   ['incFiltroId','incFiltroNombre'].forEach(id => document.getElementById(id).value = '');
-  ['incFiltroTurno','incFiltroArea','incFiltroBiometrico','incFiltroFacilitador','incFiltroLider','incFiltroJornada'].forEach(id => document.getElementById(id).value = '');
+  ['incFiltroTurno','incFiltroArea','incFiltroFacilitador','incFiltroLider','incFiltroJornada'].forEach(id => document.getElementById(id).value = '');
   incRenderTabla();
 });
 ['incFiltroId','incFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', incRenderTabla));
-['incFiltroTurno','incFiltroArea','incFiltroBiometrico','incFiltroFacilitador','incFiltroLider','incFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', incRenderTabla));
+['incFiltroTurno','incFiltroArea','incFiltroFacilitador','incFiltroLider','incFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', incRenderTabla));
 
 document.getElementById('incBtnCerrar').addEventListener('click', async () => {
   const filtradas = incObtenerFiltradas().filter(r => !r.cerrado);
@@ -2788,6 +2775,10 @@ document.getElementById('incBtnCerrar').addEventListener('click', async () => {
         }
       });
     });
+
+    // Se ordena por Fecha antes de subir, para que los IDs de SharePoint queden en orden cronológico.
+    const campoFechaIc = ic('Fecha');
+    registrosNuevos.sort((a, b) => String(a[campoFechaIc]).localeCompare(String(b[campoFechaIc])));
 
     let insertados = 0, errores = 0;
     const TAM_LOTE = 20;
