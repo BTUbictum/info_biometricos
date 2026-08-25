@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v42]</title>
+<title>Biométricos Colaboradores | Ubictum [v43]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -491,7 +491,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v42</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v43</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -773,12 +773,9 @@
     <div class="reg-campo reg-botones">
       <button class="cd-btn" id="incBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="incBtnLimpiar" type="button">Limpiar filtros</button>
+      <button class="cd-btn" id="incBtnCerrar" type="button" style="margin-left:14px;">Cerrar Semana</button>
+      <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
     </div>
-  </div>
-
-  <div style="display:flex; gap:10px; margin:14px 0;">
-    <button class="cd-btn" id="incBtnCerrar" type="button">Cerrar Semana</button>
-    <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
   </div>
 
   <div class="status-row">
@@ -2655,8 +2652,11 @@ function incRenderTabla(){
       if (d.modo === 'cerrado') {
         const reg = d.registro;
         if (!reg) return '<td>—</td>';
-        if (reg.codigo === 'A') {
-          return `<td><span class="sem-hora-doble"><span>${(reg.horaEnt||'').slice(0,5)}</span><span>${(reg.horaSal||'').slice(0,5)}</span></span></td>`;
+        // "A" con hora de entrada real (vino de una checada) se muestra como horario;
+        // "A" sin hora (puesta a mano, ej. porque falló el biométrico ese día) se
+        // muestra como badge igual que cualquier otro código manual.
+        if (reg.codigo === 'A' && reg.horaEnt) {
+          return `<td><span class="sem-hora-doble"><span>${reg.horaEnt.slice(0,5)}</span><span>${reg.horaSal ? reg.horaSal.slice(0,5) : '—'}</span></span></td>`;
         }
         return `<td><span class="inc-codigo-bloqueado">${reg.codigo}</span></td>`;
       }
@@ -2821,7 +2821,9 @@ document.getElementById('incBtnExcel').addEventListener('click', () => {
           : `${d.sesion.entrada.hora.slice(0,5)}-—`;
       } else if (d.modo === 'cerrado') {
         const reg = d.registro;
-        valor = reg ? (reg.codigo === 'A' ? `${(reg.horaEnt||'').slice(0,5)}-${(reg.horaSal||'').slice(0,5)}` : reg.codigo) : '';
+        valor = reg
+          ? (reg.codigo === 'A' && reg.horaEnt ? `${reg.horaEnt.slice(0,5)}-${reg.horaSal ? reg.horaSal.slice(0,5) : '—'}` : reg.codigo)
+          : '';
       } else {
         const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
         valor = select ? select.value : 'F';
