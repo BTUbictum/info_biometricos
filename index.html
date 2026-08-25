@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v46]</title>
+<title>Biométricos Colaboradores | Ubictum [v47]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -392,7 +392,7 @@
     padding:5px 4px; border:1px solid #dde3e4; border-radius:5px;
     font-size:12px; font-family:'Inter', sans-serif; background:#f0f2f3;
   }
-  .inc-hora-ref{ font-size:10.5px; color:#9aa3a6; margin-bottom:2px; }
+  .inc-hora-ref{ font-size:13px; font-weight:600; color:#111; margin-bottom:3px; }
   .inc-codigo-bloqueado{
     display:inline-block; padding:2px 8px; border-radius:4px;
     font-size:12px; font-weight:700; background:#eef2f2; color:#636469;
@@ -460,7 +460,7 @@
     font-size:13.5px; font-family:'Inter', sans-serif; background:#fff;
   }
   .reg-botones{ flex-direction:row; gap:8px; }
-  .reg-botones .cd-btn{ padding:9px 18px; font-size:13.5px; }
+  .reg-botones .cd-btn, .reg-botones button.ghost{ padding:7px 24px; font-size:13.5px; }
 </style>
 </head>
 <body>
@@ -492,7 +492,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v46</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v47</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
