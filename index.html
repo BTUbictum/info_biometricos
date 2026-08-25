@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v48]</title>
+<title>Biométricos Colaboradores | Ubictum [v49]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -459,7 +459,7 @@
     padding:9px 10px; border:1px solid #dde3e4; border-radius:7px;
     font-size:13.5px; font-family:'Inter', sans-serif; background:#fff;
   }
-  .reg-botones{ flex-direction:row; gap:8px; flex-wrap:wrap; }
+  .reg-botones{ flex-direction:row; gap:8px; flex-wrap:wrap; grid-column:1 / -1; }
   .reg-botones .cd-btn, .reg-botones button.ghost{ padding:6px 22px; font-size:13px; white-space:nowrap; }
 </style>
 </head>
@@ -492,7 +492,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v48</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v49</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2451,9 +2451,11 @@ async function cargarCatAccesos(token, ids){
   const mapa = {};
   cols.forEach(c => { mapa[c.displayName] = c.name; });
   const ac = (n) => mapa[n] || n;
+  console.log('[CatAccesos] mapa de columnas (visible -> interno):', mapa);
   const items = await graphFetchAll(
     `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catAccesos}/items?expand=fields&$top=500`, token
   );
+  console.log('[CatAccesos] renglones crudos recibidos:', items.length, items.map(it => it.fields));
   incAccesosMapa = new Map();
   items.forEach(it => {
     const f = it.fields;
@@ -2464,6 +2466,7 @@ async function cargarCatAccesos(token, ids){
     if (!incAccesosMapa.has(correo)) incAccesosMapa.set(correo, { nombre, roles: new Set() });
     incAccesosMapa.get(correo).roles.add(rol);
   });
+  console.log('[CatAccesos] mapa final correo -> roles:', [...incAccesosMapa.entries()]);
   return incAccesosMapa;
 }
 
@@ -2507,7 +2510,8 @@ async function inicializarIncidencias(){
       document.getElementById('incContenido').style.display = 'none';
       document.getElementById('incSinAcceso').style.display = 'block';
       document.getElementById('incSinAccesoDetalle').textContent =
-        `Correo detectado: "${usuario.correo || '(vacío)'}" — no se encontró con rol Facilitador/Líder/Admin en el catálogo.`;
+        `Correo detectado: "${usuario.correo || '(vacío)'}" — no se encontró con rol Facilitador/Líder/Admin en el catálogo. ` +
+        `El catálogo cargó ${incAccesosMapa ? incAccesosMapa.size : 0} correo(s) en total (revisa la consola del navegador con F12 para ver la lista completa).`;
       return;
     }
   } catch (err) {
