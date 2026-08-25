@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v44]</title>
+<title>Biométricos Colaboradores | Ubictum [v45]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -491,7 +491,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v44</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v45</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1817,10 +1817,8 @@ async function diaBuscar(){
     diaValoresParaDropdown = crudos;
 
     // Agrupar por colaborador y armar sesiones (Entrada/Salida del día).
-    // Se excluye Door_Panorama Comedor: el comedor no es punto de acceso
-    // de entrada ni salida, no debe contar para calcular la sesión.
     const porColab = new Map();
-    crudos.filter(r => r.biometrico !== 'Door_Panorama Comedor').forEach(r => {
+    crudos.forEach(r => {
       if (!porColab.has(r.idColab)) porColab.set(r.idColab, []);
       porColab.get(r.idColab).push(r);
     });
@@ -1845,8 +1843,8 @@ async function diaBuscar(){
           area: entrada.area,
           biometrico: entrada.biometrico, // para el filtro, aunque no se muestre en la columna
           fecha: fechaReportada,
-          horaEntrada: entrada.hora,
-          horaSalida: hayRealSalida ? salida.hora : '—',
+          horaEntrada: entrada.biometrico === 'Door_Panorama Comedor' ? '—' : entrada.hora,
+          horaSalida: !hayRealSalida ? '—' : (salida.biometrico === 'Door_Panorama Comedor' ? '—' : salida.hora),
           tiempo: hayRealSalida ? diaFormatDuracion((salida.dt - entrada.dt) / 3600000) : '—',
           facilitador: entrada.facilitador,
           lider: entrada.lider,
@@ -1939,6 +1937,14 @@ document.getElementById('diaBtnLimpiar').addEventListener('click', () => {
  * empate → el primer día de la semana (orden Lun→Dom).
  * ============================================================ */
 const DIAS_SEMANA = ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'];
+// El comedor no es punto de acceso de entrada ni salida: si un checado (Entrada
+// o Salida) proviene de Door_Panorama Comedor, se muestra "—" en vez de su hora
+// (el checado SIGUE contando para armar la sesión, solo no se enseña esa hora).
+function horaOGuion(registroChecada){
+  if (!registroChecada) return '—';
+  if (registroChecada.biometrico === 'Door_Panorama Comedor') return '—';
+  return registroChecada.hora.slice(0, 5);
+}
 const DIA_CORTO_A_LARGO = { Lun:'Lunes', Mar:'Martes', Mie:'Miércoles', Jue:'Jueves', Vie:'Viernes', Sab:'Sábado', Dom:'Domingo' };
 let semInicializado = false;
 let semValoresParaDropdown = [];
@@ -2031,9 +2037,8 @@ async function semBuscar(){
     semValoresParaDropdown = crudos;
 
     // Agrupar por colaborador → sesiones → asignar cada sesión a su día de la semana.
-    // Se excluye Door_Panorama Comedor: no es punto de acceso de entrada ni salida.
     const porColab = new Map();
-    crudos.filter(r => r.biometrico !== 'Door_Panorama Comedor').forEach(r => {
+    crudos.forEach(r => {
       if (!porColab.has(r.idColab)) porColab.set(r.idColab, []);
       porColab.get(r.idColab).push(r);
     });
@@ -2058,8 +2063,8 @@ async function semBuscar(){
         if (idxDia < 0 || idxDia > 6) return;
         porDia[idxDia] = {
           texto: hayRealSalida
-            ? `<span class="sem-hora-doble"><span>${entrada.hora.slice(0,5)}</span><span>${salida.hora.slice(0,5)}</span></span>`
-            : `<span class="sem-hora-doble"><span>${entrada.hora.slice(0,5)}</span><span>—</span></span>`,
+            ? `<span class="sem-hora-doble"><span>${horaOGuion(entrada)}</span><span>${horaOGuion(salida)}</span></span>`
+            : `<span class="sem-hora-doble"><span>${horaOGuion(entrada)}</span><span>—</span></span>`,
           entrada,
         };
       });
@@ -2495,9 +2500,8 @@ async function incBuscar(){
     });
     incValoresParaDropdown = crudos;
 
-    // Se excluye Door_Panorama Comedor: no es punto de acceso de entrada ni salida.
     const porColab = new Map();
-    crudos.filter(r => r.biometrico !== 'Door_Panorama Comedor').forEach(r => {
+    crudos.forEach(r => {
       if (!porColab.has(r.idColab)) porColab.set(r.idColab, []);
       porColab.get(r.idColab).push(r);
     });
@@ -2649,18 +2653,20 @@ function incRenderTabla(){
       if (d.modo === 'real') {
         const s = d.sesion;
         const texto = s.hayRealSalida
-          ? `<span class="sem-hora-doble"><span>${s.entrada.hora.slice(0,5)}</span><span>${s.salida.hora.slice(0,5)}</span></span>`
-          : `<span class="sem-hora-doble"><span>${s.entrada.hora.slice(0,5)}</span><span>—</span></span>`;
+          ? `<span class="sem-hora-doble"><span>${horaOGuion(s.entrada)}</span><span>${horaOGuion(s.salida)}</span></span>`
+          : `<span class="sem-hora-doble"><span>${horaOGuion(s.entrada)}</span><span>—</span></span>`;
         return `<td>${texto}</td>`;
       }
       if (d.modo === 'cerrado') {
         const reg = d.registro;
         if (!reg) return '<td>—</td>';
-        // "A" con hora de entrada real (vino de una checada) se muestra como horario;
-        // "A" sin hora (puesta a mano, ej. porque falló el biométrico ese día) se
-        // muestra como badge igual que cualquier otro código manual.
-        if (reg.codigo === 'A' && reg.horaEnt) {
-          return `<td><span class="sem-hora-doble"><span>${reg.horaEnt.slice(0,5)}</span><span>${reg.horaSal ? reg.horaSal.slice(0,5) : '—'}</span></span></td>`;
+        // "A" con al menos una hora real (vino de checada, la otra puede faltar
+        // si esa entrada/salida fue del comedor) se muestra como horario con
+        // guion en el lado sin hora. "A" totalmente sin horas (puesta a mano,
+        // o ambos lados del comedor) se muestra como badge igual que cualquier
+        // otro código manual.
+        if (reg.codigo === 'A' && (reg.horaEnt || reg.horaSal)) {
+          return `<td><span class="sem-hora-doble"><span>${reg.horaEnt ? reg.horaEnt.slice(0,5) : '—'}</span><span>${reg.horaSal ? reg.horaSal.slice(0,5) : '—'}</span></span></td>`;
         }
         return `<td><span class="inc-codigo-bloqueado">${reg.codigo}</span></td>`;
       }
@@ -2765,8 +2771,8 @@ document.getElementById('incBtnCerrar').addEventListener('click', async () => {
             [ic('Nombre')]: r.nombre,
             [ic('Fecha')]: d.fecha + 'T12:00:00Z',
             [ic('Codigo')]: 'A',
-            [ic('HoraEnt')]: s.entrada.hora.slice(0,5),
-            [ic('HoraSal')]: s.hayRealSalida ? s.salida.hora.slice(0,5) : '',
+            [ic('HoraEnt')]: s.entrada.biometrico === 'Door_Panorama Comedor' ? '' : s.entrada.hora.slice(0,5),
+            [ic('HoraSal')]: (!s.hayRealSalida || s.salida.biometrico === 'Door_Panorama Comedor') ? '' : s.salida.hora.slice(0,5),
             [ic('Semana')]: incSemanaActual.semana,
             [ic('YearSemana')]: incSemanaActual.year,
             [ic('CerradoPor')]: cerradoPor,
@@ -2821,12 +2827,12 @@ document.getElementById('incBtnExcel').addEventListener('click', () => {
       let valor = '';
       if (d.modo === 'real') {
         valor = d.sesion.hayRealSalida
-          ? `${d.sesion.entrada.hora.slice(0,5)}-${d.sesion.salida.hora.slice(0,5)}`
-          : `${d.sesion.entrada.hora.slice(0,5)}-—`;
+          ? `${horaOGuion(d.sesion.entrada)}-${horaOGuion(d.sesion.salida)}`
+          : `${horaOGuion(d.sesion.entrada)}-—`;
       } else if (d.modo === 'cerrado') {
         const reg = d.registro;
         valor = reg
-          ? (reg.codigo === 'A' && reg.horaEnt ? `${reg.horaEnt.slice(0,5)}-${reg.horaSal ? reg.horaSal.slice(0,5) : '—'}` : reg.codigo)
+          ? (reg.codigo === 'A' && (reg.horaEnt || reg.horaSal) ? `${reg.horaEnt ? reg.horaEnt.slice(0,5) : '—'}-${reg.horaSal ? reg.horaSal.slice(0,5) : '—'}` : reg.codigo)
           : '';
       } else {
         const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
