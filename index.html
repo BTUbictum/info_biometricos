@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v49]</title>
+<title>Biométricos Colaboradores | Ubictum [v50]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -459,7 +459,8 @@
     padding:9px 10px; border:1px solid #dde3e4; border-radius:7px;
     font-size:13.5px; font-family:'Inter', sans-serif; background:#fff;
   }
-  .reg-botones{ flex-direction:row; gap:8px; flex-wrap:wrap; grid-column:1 / -1; }
+  .reg-botones{ flex-direction:row; gap:8px; }
+  .inc-fila-botones{ grid-column:span 4; flex-wrap:wrap; }
   .reg-botones .cd-btn, .reg-botones button.ghost{ padding:6px 22px; font-size:13px; white-space:nowrap; }
 </style>
 </head>
@@ -492,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v49</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v50</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -779,7 +780,7 @@
       <label>Jornada</label>
       <select id="incFiltroJornada"><option value="">Todas</option></select>
     </div>
-    <div class="reg-campo reg-botones">
+    <div class="reg-campo reg-botones inc-fila-botones">
       <button class="cd-btn" id="incBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="incBtnLimpiar" type="button">Limpiar filtros</button>
       <button class="cd-btn" id="incBtnGuardar" type="button" style="margin-left:14px;">Guardar</button>
@@ -787,7 +788,7 @@
       <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
     </div>
   </div>
-  <p class="table-note" id="incGuardarAyuda" style="margin-top:-8px; margin-bottom:14px;">Guarda para dejar constancia sin bloquear — puedes seguir corrigiendo. Cerrar Semana ya no permite más cambios (salvo para Admin).</p>
+
 
   <div class="status-row">
     <span class="status" id="incStatus"></span>
