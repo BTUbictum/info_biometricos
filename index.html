@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v45]</title>
+<title>Biométricos Colaboradores | Ubictum [v46]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -392,6 +392,7 @@
     padding:5px 4px; border:1px solid #dde3e4; border-radius:5px;
     font-size:12px; font-family:'Inter', sans-serif; background:#f0f2f3;
   }
+  .inc-hora-ref{ font-size:10.5px; color:#9aa3a6; margin-bottom:2px; }
   .inc-codigo-bloqueado{
     display:inline-block; padding:2px 8px; border-radius:4px;
     font-size:12px; font-weight:700; background:#eef2f2; color:#636469;
@@ -491,7 +492,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v45</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v46</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -731,6 +732,13 @@
 
 <div class="tabpanel" id="tab-incidencias">
   <h1>Registro Incidencias</h1>
+
+  <div id="incSinAcceso" style="display:none; padding:24px; background:#fff5f5; border:1px solid #f0c9c9; border-radius:10px; color:#8a1f1f;">
+    <p style="font-weight:700; margin-bottom:6px;">Sin acceso a esta pestaña</p>
+    <p style="font-size:13.5px;">Registro Incidencias está limitado a Facilitadores, Líderes y Administradores. Si crees que deberías tener acceso, pide que agreguen tu correo al catálogo de accesos.</p>
+  </div>
+
+  <div id="incContenido">
   <p class="lead">Los días sin checada real muestran un combo (F por default) — así se captura Falta/Asistencia/Permiso/Incapacidad/Vacaciones/Descanso. Al cerrar la semana queda bloqueada para siempre para los colaboradores filtrados.</p>
 
   <div class="reg-filtros">
@@ -773,10 +781,12 @@
     <div class="reg-campo reg-botones">
       <button class="cd-btn" id="incBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="incBtnLimpiar" type="button">Limpiar filtros</button>
-      <button class="cd-btn" id="incBtnCerrar" type="button" style="margin-left:14px;">Cerrar Semana</button>
+      <button class="cd-btn" id="incBtnGuardar" type="button" style="margin-left:14px;">Guardar</button>
+      <button class="cd-btn" id="incBtnCerrar" type="button">Cerrar Semana</button>
       <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
     </div>
   </div>
+  <p class="table-note" id="incGuardarAyuda" style="margin-top:-8px; margin-bottom:14px;">Guarda para dejar constancia sin bloquear — puedes seguir corrigiendo. Cerrar Semana ya no permite más cambios (salvo para Admin).</p>
 
   <div class="status-row">
     <span class="status" id="incStatus"></span>
@@ -798,6 +808,7 @@
     </div>
     <p class="table-note" id="incTableNote"></p>
   </div>
+  </div><!-- /incContenido -->
 </div><!-- /tab-incidencias -->
 
 <div class="tabpanel" id="tab-semana">
@@ -1028,6 +1039,7 @@ const SP_LISTAS = {
   log: 'Log',
   catIncidencias: 'Incidencias',
   regIncidencias: 'RegIncidencias',
+  catAccesos: 'CatAccesos',
 };
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
@@ -2420,6 +2432,57 @@ async function cargarCatalogoIncidencias(token, ids){
   return incCatalogoOpciones;
 }
 
+/* ============================================================
+ * ROLES Y PERMISOS — CatAccesos (Correo, Nombre, Rol)
+ * ------------------------------------------------------------
+ * Una persona puede tener más de un renglón (más de un rol).
+ * El acceso a la pestaña y lo que puede editar depende del
+ * correo de la cuenta activa (msalInstance.getActiveAccount()).
+ * ============================================================ */
+let incAccesosMapa = null; // correo en minúsculas -> { nombre, roles:Set }
+let incUsuarioActual = null; // { correo, nombre, roles:Set, esAdmin, esOperaciones }
+
+async function cargarCatAccesos(token, ids){
+  if (incAccesosMapa) return incAccesosMapa;
+  const cols = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catAccesos}/columns?$select=name,displayName`, token
+  );
+  const mapa = {};
+  cols.forEach(c => { mapa[c.displayName] = c.name; });
+  const ac = (n) => mapa[n] || n;
+  const items = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catAccesos}/items?expand=fields&$top=500`, token
+  );
+  incAccesosMapa = new Map();
+  items.forEach(it => {
+    const f = it.fields;
+    const correo = String(f[ac('Correo')] || '').trim().toLowerCase();
+    const nombre = f[ac('Nombre')] || '';
+    const rol = String(f[ac('Rol')] || '').trim();
+    if (!correo || !rol) return;
+    if (!incAccesosMapa.has(correo)) incAccesosMapa.set(correo, { nombre, roles: new Set() });
+    incAccesosMapa.get(correo).roles.add(rol);
+  });
+  return incAccesosMapa;
+}
+
+async function resolverUsuarioActual(token, ids){
+  if (incUsuarioActual) return incUsuarioActual;
+  await cargarCatAccesos(token, ids);
+  const account = msalInstance.getActiveAccount();
+  const correo = account ? String(account.username || '').trim().toLowerCase() : '';
+  const info = incAccesosMapa.get(correo);
+  const roles = info ? info.roles : new Set();
+  incUsuarioActual = {
+    correo,
+    nombre: info ? info.nombre : (account ? nombreCorto(account) : ''),
+    roles,
+    esAdmin: roles.has('Admin'),
+    esOperaciones: roles.has('Facilitador') || roles.has('Lider'),
+  };
+  return incUsuarioActual;
+}
+
 async function resolverCamposRegIncidencias(token, ids){
   if (incRegCamposMapa) return incRegCamposMapa;
   const cols = await graphFetchAll(
@@ -2434,6 +2497,21 @@ async function resolverCamposRegIncidencias(token, ids){
 async function inicializarIncidencias(){
   if (incInicializado) return;
   incInicializado = true;
+  try {
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    const usuario = await resolverUsuarioActual(token, regIds);
+    if (!usuario.esAdmin && !usuario.esOperaciones) {
+      document.getElementById('incContenido').style.display = 'none';
+      document.getElementById('incSinAcceso').style.display = 'block';
+      return;
+    }
+  } catch (err) {
+    console.error(err);
+    document.getElementById('incContenido').style.display = 'none';
+    document.getElementById('incSinAcceso').style.display = 'block';
+    return;
+  }
   const hoy = new Date();
   const { semana, year } = cdSemanaISO(hoy);
   document.getElementById('incFiltroSemana').value = `${year}-W${semana}`;
@@ -2476,6 +2554,7 @@ async function incBuscar(){
     const ic = (n) => incRegMapa[n] || n;
     await cargarCatalogoIncidencias(token, regIds);
     await cargarCatalogos(token, regIds); // asegura cdCatColab cargado (Descansos por colaborador)
+    const usuario = await resolverUsuarioActual(token, regIds);
 
     const unDiaMs = 24 * 60 * 60 * 1000;
     const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
@@ -2506,7 +2585,7 @@ async function incBuscar(){
       porColab.get(r.idColab).push(r);
     });
 
-    const camposInc = ['IDColab','Fecha','Codigo','HoraEnt','HoraSal'].map(n => ic(n)).join(',');
+    const camposInc = ['IDColab','Fecha','Codigo','HoraEnt','HoraSal','Cerrado','GuardadoPor','ModificadoPorTyC'].map(n => ic(n)).join(',');
     // Margen de 1 día de cada lado, mismo criterio que ya usamos en RegBio26 —
     // como los registros ahora se guardan a mediodía UTC, este margen sobra
     // de más, pero es la práctica consistente en toda la app contra el
@@ -2516,6 +2595,7 @@ async function incBuscar(){
     const filtroInc = encodeURIComponent(`fields/${ic('Fecha')} ge '${desdeIncAmpliado}' and fields/${ic('Fecha')} le '${hastaIncAmpliado}'`);
     const urlInc = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.regIncidencias}/items?expand=fields(select=${camposInc})&$filter=${filtroInc}&$top=5000`;
     const itemsInc = await graphFetchAll(urlInc, token);
+    // idColab -> { cerrado, guardadoPor, modificadoPorTyC, porFecha: Map(fecha -> {itemId, codigo, horaEnt, horaSal}) }
     incCerradosMap = new Map();
     itemsInc.forEach(it => {
       const f = it.fields;
@@ -2525,13 +2605,23 @@ async function incBuscar(){
       // un simple .slice(0,10) puede leer el día equivocado (un día antes).
       const fechaRaw = f[ic('Fecha')];
       const fecha = fechaRaw ? new Date(fechaRaw).toISOString().slice(0, 10) : '';
-      if (!incCerradosMap.has(idColab)) incCerradosMap.set(idColab, new Map());
-      incCerradosMap.get(idColab).set(fecha, {
+      if (!incCerradosMap.has(idColab)) {
+        incCerradosMap.set(idColab, { cerrado: false, guardadoPor: '', modificadoPorTyC: '', porFecha: new Map() });
+      }
+      const info = incCerradosMap.get(idColab);
+      if (f[ic('Cerrado')]) info.cerrado = true;
+      if (f[ic('GuardadoPor')]) info.guardadoPor = f[ic('GuardadoPor')];
+      if (f[ic('ModificadoPorTyC')]) info.modificadoPorTyC = f[ic('ModificadoPorTyC')];
+      info.porFecha.set(fecha, {
+        itemId: it.id,
         codigo: f[ic('Codigo')] || '',
         horaEnt: f[ic('HoraEnt')] || '',
         horaSal: f[ic('HoraSal')] || '',
       });
     });
+
+    const HOY_STR = new Date().toISOString().slice(0, 10);
+    const AYER_STR = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
     const filas = [];
     porColab.forEach(registros => {
@@ -2555,8 +2645,14 @@ async function incBuscar(){
 
       const primerConDatos = porDiaSesion.find(d => d).entrada;
       const idColab = primerConDatos.idColab;
-      const cerradoInfo = incCerradosMap.get(idColab);
-      const cerrado = !!cerradoInfo;
+      const infoGuardado = incCerradosMap.get(idColab);
+      const cerrado = !!(infoGuardado && infoGuardado.cerrado);
+      const estatus = cerrado ? 'cerrada' : (infoGuardado ? 'guardado' : 'sinGuardar');
+
+      // Esta fila, ¿es "mía" para un usuario de Operaciones (Facilitador/Líder)?
+      const esFacilitadorDeEsta = usuario.esOperaciones && !usuario.esAdmin &&
+        usuario.nombre && (primerConDatos.facilitador === usuario.nombre || primerConDatos.lider === usuario.nombre);
+      if (usuario.esOperaciones && !usuario.esAdmin && !esFacilitadorDeEsta) return; // no es suyo, se omite
 
       const conteoTurno = {}, conteoArea = {};
       porDiaSesion.forEach(d => {
@@ -2577,14 +2673,36 @@ async function incBuscar(){
       const dias = [];
       for (let i = 0; i < 7; i++) {
         const fechaDia = new Date(lunes.getTime() + i * 86400000).toISOString().slice(0, 10);
-        if (cerrado) {
-          const reg = cerradoInfo.get(fechaDia);
-          dias.push({ modo: 'cerrado', fecha: fechaDia, registro: reg || null, sesion: porDiaSesion[i] });
-        } else if (porDiaSesion[i]) {
-          dias.push({ modo: 'real', fecha: fechaDia, sesion: porDiaSesion[i] });
+        const registroGuardado = infoGuardado ? infoGuardado.porFecha.get(fechaDia) : null;
+        const tieneSesionReal = !!porDiaSesion[i];
+
+        // baseValor: de dónde sale el valor a mostrar/editar por default.
+        let baseValor;
+        if (registroGuardado) {
+          baseValor = { tipo: 'guardado', codigo: registroGuardado.codigo, horaEnt: registroGuardado.horaEnt, horaSal: registroGuardado.horaSal, itemId: registroGuardado.itemId };
+        } else if (tieneSesionReal) {
+          baseValor = { tipo: 'real' };
         } else {
-          dias.push({ modo: 'combo', fecha: fechaDia, sesion: null });
+          baseValor = { tipo: 'ninguno' };
         }
+
+        // puedeEditar: si NO está cerrada, Admin siempre puede; Operaciones puede
+        // salvo en días con checada real (esos son de Admin únicamente). Si YA
+        // está cerrada, solo Admin puede seguir editando (corrección de TyC).
+        let puedeEditar;
+        if (cerrado) {
+          puedeEditar = usuario.esAdmin;
+        } else if (baseValor.tipo === 'real') {
+          puedeEditar = usuario.esAdmin;
+        } else {
+          puedeEditar = usuario.esAdmin || usuario.esOperaciones;
+        }
+
+        // Regla de Vacaciones: no se puede elegir V para una fecha de hace más
+        // de 1 día (hoy o ayer sí, antier en adelante ya no) — aplica a todos.
+        const permiteV = fechaDia >= AYER_STR;
+
+        dias.push({ fecha: fechaDia, baseValor, puedeEditar, permiteV, sesionReal: porDiaSesion[i] });
       }
 
       filas.push({
@@ -2592,7 +2710,10 @@ async function incBuscar(){
         turno: moda(conteoTurno), area: moda(conteoArea),
         biometricoValores: porDiaSesion.filter(Boolean).map(d => d.entrada.biometrico),
         facilitador: primerConDatos.facilitador, lider: primerConDatos.lider,
-        jornada: primerConDatos.jornada, cerrado, dias,
+        jornada: primerConDatos.jornada, cerrado, estatus,
+        guardadoPor: infoGuardado ? infoGuardado.guardadoPor : '',
+        modificadoPorTyC: infoGuardado ? infoGuardado.modificadoPorTyC : '',
+        dias,
       });
     });
 
@@ -2645,49 +2766,77 @@ function incRenderTabla(){
   const tbody = document.getElementById('incTbody');
   const note = document.getElementById('incTableNote');
   const filtradas = incObtenerFiltradas();
+  const usuario = incUsuarioActual;
 
   tbody.innerHTML = '';
   filtradas.forEach(r => {
     const tr = document.createElement('tr');
     const celdasDias = r.dias.map((d, idx) => {
-      if (d.modo === 'real') {
-        const s = d.sesion;
-        const texto = s.hayRealSalida
-          ? `<span class="sem-hora-doble"><span>${horaOGuion(s.entrada)}</span><span>${horaOGuion(s.salida)}</span></span>`
-          : `<span class="sem-hora-doble"><span>${horaOGuion(s.entrada)}</span><span>—</span></span>`;
-        return `<td>${texto}</td>`;
+      const bv = d.baseValor;
+
+      // Texto/hora de referencia para mostrar cuando hay checada real de fondo
+      // (se muestra siempre que exista, editable o no, como contexto).
+      let referenciaReal = '';
+      if (d.sesionReal) {
+        const s = d.sesionReal;
+        referenciaReal = s.hayRealSalida
+          ? `<div class="inc-hora-ref">${horaOGuion(s.entrada)} – ${horaOGuion(s.salida)}</div>`
+          : `<div class="inc-hora-ref">${horaOGuion(s.entrada)} – —</div>`;
       }
-      if (d.modo === 'cerrado') {
-        const reg = d.registro;
-        if (!reg) return '<td>—</td>';
-        // "A" con al menos una hora real (vino de checada, la otra puede faltar
-        // si esa entrada/salida fue del comedor) se muestra como horario con
-        // guion en el lado sin hora. "A" totalmente sin horas (puesta a mano,
-        // o ambos lados del comedor) se muestra como badge igual que cualquier
-        // otro código manual.
-        if (reg.codigo === 'A' && (reg.horaEnt || reg.horaSal)) {
-          return `<td><span class="sem-hora-doble"><span>${reg.horaEnt ? reg.horaEnt.slice(0,5) : '—'}</span><span>${reg.horaSal ? reg.horaSal.slice(0,5) : '—'}</span></span></td>`;
+
+      if (!d.puedeEditar) {
+        // Solo lectura: muestra lo que haya (guardado o real), sin combo.
+        if (bv.tipo === 'guardado') {
+          if (bv.codigo === 'A' && (bv.horaEnt || bv.horaSal)) {
+            return `<td><span class="sem-hora-doble"><span>${bv.horaEnt ? bv.horaEnt.slice(0,5) : '—'}</span><span>${bv.horaSal ? bv.horaSal.slice(0,5) : '—'}</span></span></td>`;
+          }
+          return `<td><span class="inc-codigo-bloqueado">${bv.codigo}</span></td>`;
         }
-        return `<td><span class="inc-codigo-bloqueado">${reg.codigo}</span></td>`;
+        if (bv.tipo === 'real') {
+          const s = d.sesionReal;
+          const texto = s.hayRealSalida
+            ? `<span class="sem-hora-doble"><span>${horaOGuion(s.entrada)}</span><span>${horaOGuion(s.salida)}</span></span>`
+            : `<span class="sem-hora-doble"><span>${horaOGuion(s.entrada)}</span><span>—</span></span>`;
+          return `<td>${texto}</td>`;
+        }
+        return '<td>—</td>';
       }
-      // Por default F, salvo que ese día de la semana esté en los Descansos
-      // registrados del colaborador en CatColab — ahí default D.
-      const catColabInfo = cdCatColab ? cdCatColab.get(r.idColab) : null;
-      const diaLargo = DIA_CORTO_A_LARGO[DIAS_SEMANA[idx]];
-      const esDescanso = !!(catColabInfo && catColabInfo.descansos &&
-        catColabInfo.descansos.split('-').map(s => s.trim()).includes(diaLargo));
-      const codigoDefault = esDescanso ? 'D' : 'F';
-      const opciones = (incCatalogoOpciones || []).map(o =>
+
+      // Editable: combo. Pre-selecciona el código guardado si ya había uno;
+      // si viene de checada real (admin corrigiendo), pre-selecciona "A";
+      // si no hay nada, F por default (D si ese día es descanso registrado).
+      let codigoDefault;
+      if (bv.tipo === 'guardado') {
+        codigoDefault = bv.codigo;
+      } else if (bv.tipo === 'real') {
+        codigoDefault = 'A';
+      } else {
+        const catColabInfo = cdCatColab ? cdCatColab.get(r.idColab) : null;
+        const diaLargo = DIA_CORTO_A_LARGO[DIAS_SEMANA[idx]];
+        const esDescanso = !!(catColabInfo && catColabInfo.descansos &&
+          catColabInfo.descansos.split('-').map(s => s.trim()).includes(diaLargo));
+        codigoDefault = esDescanso ? 'D' : 'F';
+      }
+
+      const opciones = (incCatalogoOpciones || []).filter(o => {
+        if (!usuario.esAdmin && (o.code === 'PSG' || o.code === 'A')) return false; // PSG y A: solo Admin
+        if (o.code === 'V' && !d.permiteV) return false; // Vacaciones: solo hoy/ayer
+        return true;
+      }).map(o =>
         `<option value="${o.code}" ${o.code === codigoDefault ? 'selected' : ''}>${o.code}</option>`
       ).join('');
-      return `<td><select class="inc-combo" data-idcolab="${r.idColab}" data-fecha="${d.fecha}">${opciones}</select></td>`;
+
+      return `<td>${referenciaReal}<select class="inc-combo" data-idcolab="${r.idColab}" data-fecha="${d.fecha}" data-esreal="${bv.tipo === 'real' ? '1' : '0'}">${opciones}</select></td>`;
     }).join('');
+
+    const etiquetaEstatus = { sinGuardar: 'Sin guardar', guardado: 'Guardado', cerrada: 'Cerrada' }[r.estatus];
+    const claseEstatus = { sinGuardar: 'inc-estatus-abierto', guardado: 'inc-estatus-abierto', cerrada: 'inc-estatus-cerrado' }[r.estatus];
 
     tr.innerHTML = `
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno || ''}</td><td>${r.area || ''}</td>
       ${celdasDias}
       <td>${r.jornada || ''}</td>
-      <td class="${r.cerrado ? 'inc-estatus-cerrado' : 'inc-estatus-abierto'}">${r.cerrado ? 'Cerrada' : 'Abierta'}</td>
+      <td class="${claseEstatus}">${etiquetaEstatus}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -2698,12 +2847,14 @@ function incRenderTabla(){
 async function incEnviarLoteConReintentos(token, ids, lote, intento = 1){
   const MAX_INTENTOS = 8;
   const body = {
-    requests: lote.map((fields, j) => ({
+    requests: lote.map((op, j) => ({
       id: String(j + 1),
-      method: 'POST',
-      url: `/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items`,
+      method: op.itemId ? 'PATCH' : 'POST',
+      url: op.itemId
+        ? `/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items/${op.itemId}/fields`
+        : `/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items`,
       headers: { 'Content-Type': 'application/json' },
-      body: { fields },
+      body: op.itemId ? op.fields : { fields: op.fields },
     })),
   };
   let resp;
@@ -2742,106 +2893,143 @@ document.getElementById('incBtnLimpiar').addEventListener('click', () => {
 ['incFiltroId','incFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', incRenderTabla));
 ['incFiltroTurno','incFiltroArea','incFiltroFacilitador','incFiltroLider','incFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', incRenderTabla));
 
-document.getElementById('incBtnCerrar').addEventListener('click', async () => {
-  const filtradas = incObtenerFiltradas().filter(r => !r.cerrado);
-  if (!filtradas.length) { alert('No hay colaboradores abiertos para cerrar con los filtros actuales.'); return; }
+function incConstruirOperaciones(filtradas, cerrando, ic){
+  const usuario = incUsuarioActual;
+  const operaciones = [];
+  const omitidosSinGuardar = [];
 
-  const confirmacion = confirm(`Vas a cerrar la semana para ${filtradas.length} colaborador(es). Esto crea su registro histórico y ya NO se podrá editar. ¿Continuar?`);
-  if (!confirmacion) return;
+  filtradas.forEach(r => {
+    if (r.cerrado && !usuario.esAdmin) return; // protección extra, no debería pasar
+    if (cerrando && r.estatus === 'sinGuardar') { omitidosSinGuardar.push(r.idColab); return; }
+    if (cerrando && r.estatus === 'cerrada') return; // ya cerrada, nada que hacer aquí
 
-  const btn = document.getElementById('incBtnCerrar');
-  btn.disabled = true;
+    const eraCerrada = r.estatus === 'cerrada'; // Admin corrigiendo una semana ya cerrada
+
+    r.dias.forEach(d => {
+      if (!d.puedeEditar) return;
+      const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
+      if (!select) return;
+      const codigo = select.value;
+
+      let horaEnt = '', horaSal = '';
+      if (d.baseValor.tipo === 'real' && codigo === 'A') {
+        const s = d.sesionReal;
+        horaEnt = s.entrada.biometrico === 'Door_Panorama Comedor' ? '' : s.entrada.hora.slice(0,5);
+        horaSal = (!s.hayRealSalida || s.salida.biometrico === 'Door_Panorama Comedor') ? '' : s.salida.hora.slice(0,5);
+      }
+
+      const fields = {
+        [ic('IDColab')]: r.idColab,
+        [ic('Nombre')]: r.nombre,
+        [ic('Fecha')]: d.fecha + 'T12:00:00Z',
+        [ic('Codigo')]: codigo,
+        [ic('HoraEnt')]: horaEnt,
+        [ic('HoraSal')]: horaSal,
+        [ic('Semana')]: incSemanaActual.semana,
+        [ic('YearSemana')]: incSemanaActual.year,
+      };
+      if (eraCerrada) {
+        fields[ic('ModificadoPorTyC')] = usuario.correo;
+      } else {
+        fields[ic('GuardadoPor')] = usuario.correo;
+      }
+      if (cerrando) {
+        fields[ic('Cerrado')] = true;
+        fields[ic('CerradoPor')] = usuario.correo;
+      } else if (!eraCerrada) {
+        fields[ic('Cerrado')] = false;
+      }
+
+      operaciones.push({ itemId: d.baseValor.itemId || null, fields });
+    });
+  });
+
+  operaciones.sort((a, b) => String(a.fields[ic('Fecha')]).localeCompare(String(b.fields[ic('Fecha')])));
+  return { operaciones, omitidosSinGuardar };
+}
+
+async function incGuardarOCerrar(cerrando){
+  if (!incUsuarioActual.esAdmin && !incUsuarioActual.esOperaciones) return;
+  const filtradas = incObtenerFiltradas();
+  if (!filtradas.length) { alert('No hay colaboradores para guardar con los filtros actuales.'); return; }
+
+  const mensajeConfirmacion = cerrando
+    ? `Vas a CERRAR la semana para los colaboradores filtrados que ya tengan un Guardado previo. Después de cerrar, ya no se podrán editar (salvo Admin). ¿Continuar?`
+    : `Vas a guardar los cambios de los colaboradores filtrados. La semana sigue abierta para seguir corrigiendo. ¿Continuar?`;
+  if (!confirm(mensajeConfirmacion)) return;
+
+  const btnGuardar = document.getElementById('incBtnGuardar');
+  const btnCerrar = document.getElementById('incBtnCerrar');
+  btnGuardar.disabled = true; btnCerrar.disabled = true;
   const status = document.getElementById('incStatus');
   try {
-    status.textContent = 'Cerrando semana…';
+    status.textContent = cerrando ? 'Cerrando semana…' : 'Guardando…';
     const token = await obtenerTokenGraph();
     const ids = regIds;
     const camposMapa = await resolverCamposRegIncidencias(token, ids);
     const ic = (n) => camposMapa[n] || n;
-    const account = msalInstance.getActiveAccount();
-    const cerradoPor = account ? (account.username || nombreCorto(account)) : '';
 
-    const registrosNuevos = [];
-    filtradas.forEach(r => {
-      r.dias.forEach(d => {
-        if (d.modo === 'real') {
-          const s = d.sesion;
-          registrosNuevos.push({
-            [ic('IDColab')]: r.idColab,
-            [ic('Nombre')]: r.nombre,
-            [ic('Fecha')]: d.fecha + 'T12:00:00Z',
-            [ic('Codigo')]: 'A',
-            [ic('HoraEnt')]: s.entrada.biometrico === 'Door_Panorama Comedor' ? '' : s.entrada.hora.slice(0,5),
-            [ic('HoraSal')]: (!s.hayRealSalida || s.salida.biometrico === 'Door_Panorama Comedor') ? '' : s.salida.hora.slice(0,5),
-            [ic('Semana')]: incSemanaActual.semana,
-            [ic('YearSemana')]: incSemanaActual.year,
-            [ic('CerradoPor')]: cerradoPor,
-          });
-        } else if (d.modo === 'combo') {
-          const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
-          const codigo = select ? select.value : 'F';
-          registrosNuevos.push({
-            [ic('IDColab')]: r.idColab,
-            [ic('Nombre')]: r.nombre,
-            [ic('Fecha')]: d.fecha + 'T12:00:00Z',
-            [ic('Codigo')]: codigo,
-            [ic('HoraEnt')]: '',
-            [ic('HoraSal')]: '',
-            [ic('Semana')]: incSemanaActual.semana,
-            [ic('YearSemana')]: incSemanaActual.year,
-            [ic('CerradoPor')]: cerradoPor,
-          });
-        }
-      });
-    });
+    const { operaciones, omitidosSinGuardar } = incConstruirOperaciones(filtradas, cerrando, ic);
 
-    // Se ordena por Fecha antes de subir, para que los IDs de SharePoint queden en orden cronológico.
-    const campoFechaIc = ic('Fecha');
-    registrosNuevos.sort((a, b) => String(a[campoFechaIc]).localeCompare(String(b[campoFechaIc])));
-
-    let insertados = 0, errores = 0;
-    const TAM_LOTE = 20;
-    for (let i = 0; i < registrosNuevos.length; i += TAM_LOTE) {
-      const lote = registrosNuevos.slice(i, i + TAM_LOTE);
-      const res = await incEnviarLoteConReintentos(token, ids, lote);
-      insertados += res.ok; errores += res.errores;
-      status.textContent = `Cerrando… ${Math.min(i + TAM_LOTE, registrosNuevos.length)}/${registrosNuevos.length}`;
-      if (i + TAM_LOTE < registrosNuevos.length) await cdEsperar(500);
+    if (!operaciones.length) {
+      status.textContent = omitidosSinGuardar.length
+        ? `Nada que hacer — primero guarda antes de cerrar (${omitidosSinGuardar.join(', ')}).`
+        : 'No había nada editable para guardar con los filtros actuales.';
+      return;
     }
 
-    status.textContent = `Listo. ${insertados} registros creados, ${errores} errores.`;
+    let ok = 0, errores = 0;
+    const TAM_LOTE = 20;
+    for (let i = 0; i < operaciones.length; i += TAM_LOTE) {
+      const lote = operaciones.slice(i, i + TAM_LOTE);
+      const res = await incEnviarLoteConReintentos(token, ids, lote);
+      ok += res.ok; errores += res.errores;
+      status.textContent = `${cerrando ? 'Cerrando' : 'Guardando'}… ${Math.min(i + TAM_LOTE, operaciones.length)}/${operaciones.length}`;
+      if (i + TAM_LOTE < operaciones.length) await cdEsperar(500);
+    }
+
+    let mensaje = `Listo. ${ok} registros ${cerrando ? 'cerrados' : 'guardados'}, ${errores} errores.`;
+    if (omitidosSinGuardar.length) mensaje += ` Se omitieron (sin guardado previo): ${omitidosSinGuardar.join(', ')}.`;
+    status.textContent = mensaje;
     await incBuscar();
   } catch (err) {
     console.error(err);
-    status.textContent = 'Error al cerrar: ' + err.message;
+    status.textContent = 'Error: ' + err.message;
   } finally {
-    btn.disabled = false;
+    btnGuardar.disabled = false; btnCerrar.disabled = false;
   }
-});
+}
+
+document.getElementById('incBtnGuardar').addEventListener('click', () => incGuardarOCerrar(false));
+document.getElementById('incBtnCerrar').addEventListener('click', () => incGuardarOCerrar(true));
 
 document.getElementById('incBtnExcel').addEventListener('click', () => {
   const filtradas = incObtenerFiltradas();
+  const etiquetaEstatus = { sinGuardar: 'Sin guardar', guardado: 'Guardado', cerrada: 'Cerrada' };
   const filas = filtradas.map(r => {
     const obj = { 'ID Colaborador': r.idColab, 'Nombre': r.nombre, 'Turno': r.turno, 'Área': r.area };
     r.dias.forEach((d, idx) => {
+      const bv = d.baseValor;
       let valor = '';
-      if (d.modo === 'real') {
-        valor = d.sesion.hayRealSalida
-          ? `${horaOGuion(d.sesion.entrada)}-${horaOGuion(d.sesion.salida)}`
-          : `${horaOGuion(d.sesion.entrada)}-—`;
-      } else if (d.modo === 'cerrado') {
-        const reg = d.registro;
-        valor = reg
-          ? (reg.codigo === 'A' && (reg.horaEnt || reg.horaSal) ? `${reg.horaEnt ? reg.horaEnt.slice(0,5) : '—'}-${reg.horaSal ? reg.horaSal.slice(0,5) : '—'}` : reg.codigo)
-          : '';
+      if (!d.puedeEditar) {
+        if (bv.tipo === 'guardado') {
+          valor = (bv.codigo === 'A' && (bv.horaEnt || bv.horaSal))
+            ? `${bv.horaEnt ? bv.horaEnt.slice(0,5) : '—'}-${bv.horaSal ? bv.horaSal.slice(0,5) : '—'}`
+            : bv.codigo;
+        } else if (bv.tipo === 'real') {
+          const s = d.sesionReal;
+          valor = s.hayRealSalida ? `${horaOGuion(s.entrada)}-${horaOGuion(s.salida)}` : `${horaOGuion(s.entrada)}-—`;
+        }
       } else {
         const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
-        valor = select ? select.value : 'F';
+        valor = select ? select.value : (bv.codigo || 'F');
       }
       obj[DIAS_SEMANA[idx]] = valor;
     });
     obj['Jornada'] = r.jornada;
-    obj['Estatus'] = r.cerrado ? 'Cerrada' : 'Abierta';
+    obj['Estatus'] = etiquetaEstatus[r.estatus];
+    obj['GuardadoPor'] = r.guardadoPor;
+    obj['ModificadoPorTyC'] = r.modificadoPorTyC;
     return obj;
   });
   const hoja = XLSX.utils.json_to_sheet(filas);
