@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v38]</title>
+<title>Biométricos Colaboradores | Ubictum [v39]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -388,6 +388,16 @@
   tbody tr.fila-seleccionada{ background: #d6dadb !important; }
   .sem-dia-label{ font-size: 10px; font-weight: 400; opacity: .75; display: block; }
   .sem-hora-doble{ display: flex; flex-direction: column; line-height: 1.5; }
+  .inc-combo{
+    padding:5px 4px; border:1px solid #dde3e4; border-radius:5px;
+    font-size:12px; font-family:'Inter', sans-serif; background:#fff8e6;
+  }
+  .inc-codigo-bloqueado{
+    display:inline-block; padding:2px 8px; border-radius:4px;
+    font-size:12px; font-weight:700; background:#eef2f2; color:#636469;
+  }
+  .inc-estatus-abierto{ color:#b3892f; font-weight:600; }
+  .inc-estatus-cerrado{ color:#2f7d4f; font-weight:600; }
   .table-wrap{
     max-height: 420px;
     overflow: auto;
@@ -478,9 +488,10 @@
   <button class="tabbtn active" data-tab="registros" type="button">Registros</button>
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
+  <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v38</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v39</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -744,6 +755,84 @@
   </div>
 </div>
 
+<div class="tabpanel" id="tab-incidencias">
+  <h1>Registro Incidencias</h1>
+  <p class="lead">Los días sin checada real muestran un combo (F por default) — así se captura Falta/Asistencia/Permiso/Incapacidad/Vacaciones/Descanso. Al cerrar la semana queda bloqueada para siempre para los colaboradores filtrados.</p>
+
+  <div class="reg-filtros">
+    <div class="reg-campo">
+      <label>Semana</label>
+      <input type="week" id="incFiltroSemana">
+    </div>
+    <div class="reg-campo">
+      <label>Rango de fechas</label>
+      <div id="incRangoLabel" style="padding:9px 0 0; font-size:13.5px; font-weight:600; color:var(--negro,#111);">—</div>
+    </div>
+    <div class="reg-campo">
+      <label>ID Colaborador</label>
+      <input type="text" id="incFiltroId" placeholder="Ej. 100357">
+    </div>
+    <div class="reg-campo">
+      <label>Nombre</label>
+      <input type="text" id="incFiltroNombre" placeholder="Buscar por nombre">
+    </div>
+    <div class="reg-campo">
+      <label>Turno</label>
+      <select id="incFiltroTurno"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Área</label>
+      <select id="incFiltroArea"><option value="">Todas</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Biométrico</label>
+      <select id="incFiltroBiometrico"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Facilitador</label>
+      <select id="incFiltroFacilitador"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Líder</label>
+      <select id="incFiltroLider"><option value="">Todos</option></select>
+    </div>
+    <div class="reg-campo">
+      <label>Jornada</label>
+      <select id="incFiltroJornada"><option value="">Todas</option></select>
+    </div>
+    <div class="reg-campo reg-botones">
+      <button class="cd-btn" id="incBtnBuscar" type="button">Buscar</button>
+      <button class="ghost" id="incBtnLimpiar" type="button">Limpiar filtros</button>
+    </div>
+  </div>
+
+  <div class="status-row">
+    <span class="status" id="incStatus"></span>
+  </div>
+
+  <div style="display:flex; gap:10px; margin:14px 0;">
+    <button class="cd-btn" id="incBtnCerrar" type="button">Cerrar Semana</button>
+    <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
+            <th id="incThDiaLun">Lun</th><th id="incThDiaMar">Mar</th><th id="incThDiaMie">Mié</th>
+            <th id="incThDiaJue">Jue</th><th id="incThDiaVie">Vie</th><th id="incThDiaSab">Sáb</th><th id="incThDiaDom">Dom</th>
+            <th>Jornada</th><th>Estatus</th>
+          </tr>
+        </thead>
+        <tbody id="incTbody"></tbody>
+      </table>
+    </div>
+    <p class="table-note" id="incTableNote"></p>
+  </div>
+</div><!-- /tab-incidencias -->
+
 <div class="tabpanel" id="tab-semana">
   <h1>Registros por Semana</h1>
 
@@ -960,6 +1049,7 @@ document.getElementById('tabbar').addEventListener('click', (e) => {
   document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
   if (btn.dataset.tab === 'dia' && typeof inicializarDia === 'function') inicializarDia();
   if (btn.dataset.tab === 'semana' && typeof inicializarSemana === 'function') inicializarSemana();
+  if (btn.dataset.tab === 'incidencias' && typeof inicializarIncidencias === 'function') inicializarIncidencias();
   if (btn.dataset.tab === 'biometrico' && typeof inicializarBiometrico === 'function') inicializarBiometrico();
 });
 
@@ -973,6 +1063,8 @@ const SP_LISTAS = {
   catColab: 'CatColab',
   catTurnos: 'CatTurnos',
   log: 'Log',
+  catIncidencias: 'Incidencias',
+  regIncidencias: 'RegIncidencias',
 };
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
@@ -1020,7 +1112,7 @@ async function resolverGraphIds(token){
   const site = await graphFetch(`${GRAPH}/sites/${SP_HOST}:${SP_SITE_PATH}`, token);
   const siteId = site.id;
 
-  cdLog('Buscando listas (RegBio26, CatColab, CatTurnos, Log)…');
+  cdLog('Buscando listas (RegBio26, CatColab, CatTurnos, Log, Incidencias, RegIncidencias)…');
   const listas = await graphFetchAll(`${GRAPH}/sites/${siteId}/lists?$select=id,displayName`, token);
   const listIds = {};
   for (const key in SP_LISTAS) {
@@ -2600,6 +2692,452 @@ document.getElementById('cdBtnVaciar').addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+
+/* ============================================================
+ * PESTAÑA REGISTRO INCIDENCIAS
+ * ------------------------------------------------------------
+ * Misma base que Registros por Semana (checadas reales de
+ * RegBio26 agrupadas por sesión) + los registros ya cerrados de
+ * RegIncidencias para esa semana. Si un colaborador tiene
+ * registros en RegIncidencias para esta semana, esa semana ya
+ * está CERRADA para él (solo lectura). Si no, los días sin
+ * checada real muestran un combo editable (F por default);
+ * los días con checada real siempre son de solo lectura.
+ * ============================================================ */
+let incInicializado = false;
+let incValoresParaDropdown = [];
+let incFilasDatos = [];
+let incCerradosMap = new Map();
+let incCatalogoOpciones = null;
+let incRegCamposMapa = null;
+let incSemanaActual = null; // { semana, year } de la semana actualmente consultada
+
+async function cargarCatalogoIncidencias(token, ids){
+  if (incCatalogoOpciones) return incCatalogoOpciones;
+  const cols = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catIncidencias}/columns?$select=name,displayName`, token
+  );
+  const mapa = {};
+  cols.forEach(c => { mapa[c.displayName] = c.name; });
+  const ic = (n) => mapa[n] || n;
+  const items = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catIncidencias}/items?expand=fields&$top=100`, token
+  );
+  incCatalogoOpciones = items.map(it => ({
+    label: it.fields[ic('Incidencia')] || '',
+    code: it.fields[ic('Abreviatura')] || '',
+  })).filter(o => o.code);
+  return incCatalogoOpciones;
+}
+
+async function resolverCamposRegIncidencias(token, ids){
+  if (incRegCamposMapa) return incRegCamposMapa;
+  const cols = await graphFetchAll(
+    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/columns?$select=name,displayName`, token
+  );
+  const mapa = {};
+  cols.forEach(c => { mapa[c.displayName] = c.name; });
+  incRegCamposMapa = mapa;
+  return mapa;
+}
+
+async function inicializarIncidencias(){
+  if (incInicializado) return;
+  incInicializado = true;
+  const hoy = new Date();
+  const { semana, year } = cdSemanaISO(hoy);
+  document.getElementById('incFiltroSemana').value = `${year}-W${semana}`;
+  await incBuscar();
+}
+
+async function incBuscar(){
+  const status = document.getElementById('incStatus');
+  try {
+    const valorSemana = document.getElementById('incFiltroSemana').value;
+    let year, semana;
+    if (valorSemana) {
+      [year, semana] = valorSemana.split('-W').map(Number);
+    } else {
+      const r = cdSemanaISO(new Date());
+      year = Number(r.year); semana = Number(r.semana);
+      document.getElementById('incFiltroSemana').value = `${r.year}-W${r.semana}`;
+    }
+    incSemanaActual = { semana: String(semana).padStart(2,'0'), year: String(year) };
+
+    const { lunes, domingo } = semanaAFechas(year, semana);
+    const lunesStr = lunes.toISOString().slice(0, 10);
+    const domingoStr = domingo.toISOString().slice(0, 10);
+    document.getElementById('incRangoLabel').textContent =
+      `${semFormatFechaCorta(lunes)} – ${semFormatFechaCorta(domingo)} de ${domingo.getUTCFullYear()}`;
+
+    const idsThDia = ['incThDiaLun','incThDiaMar','incThDiaMie','incThDiaJue','incThDiaVie','incThDiaSab','incThDiaDom'];
+    idsThDia.forEach((id, idx) => {
+      const fechaDia = new Date(lunes.getTime() + idx * 86400000);
+      document.getElementById(id).innerHTML =
+        `${DIAS_SEMANA[idx]}<span class="sem-dia-label">${semFormatFechaCorta(fechaDia)}</span>`;
+    });
+
+    status.textContent = 'Consultando…';
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+    const c = (n) => regCamposMapa[n] || n;
+    const incRegMapa = await resolverCamposRegIncidencias(token, regIds);
+    const ic = (n) => incRegMapa[n] || n;
+    await cargarCatalogoIncidencias(token, regIds);
+
+    const unDiaMs = 24 * 60 * 60 * 1000;
+    const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
+    const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
+
+    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada']
+      .map(n => c(n)).join(',');
+    const filtroReg = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
+    const urlReg = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtroReg}&$top=5000`;
+    const itemsReg = await graphFetchAll(urlReg, token);
+    const crudos = itemsReg.map(it => {
+      const f = it.fields;
+      const fecha = (f[c('Fecha')] || '').slice(0, 10);
+      const hora = f[c('Hora')] || '00:00:00';
+      return {
+        idColab: f[c('IDColab')] || '', nombre: f[c('Nombre')] || '',
+        turno: f[c('TurnoAsignado')] || '', area: f[c('Area')] || '',
+        biometrico: f[c('Biometrico')] || '', fecha, hora,
+        facilitador: f[c('Facilitador')] || '', lider: f[c('Lider')] || '',
+        jornada: f[c('Jornada')] || '', dt: new Date(fecha + 'T' + hora + 'Z'),
+      };
+    });
+    incValoresParaDropdown = crudos;
+
+    const porColab = new Map();
+    crudos.forEach(r => {
+      if (!porColab.has(r.idColab)) porColab.set(r.idColab, []);
+      porColab.get(r.idColab).push(r);
+    });
+
+    const camposInc = ['IDColab','Fecha','Codigo','HoraEnt','HoraSal'].map(n => ic(n)).join(',');
+    const filtroInc = encodeURIComponent(`fields/${ic('Fecha')} ge '${lunes.toISOString()}' and fields/${ic('Fecha')} le '${domingo.toISOString()}'`);
+    const urlInc = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.regIncidencias}/items?expand=fields(select=${camposInc})&$filter=${filtroInc}&$top=5000`;
+    const itemsInc = await graphFetchAll(urlInc, token);
+    incCerradosMap = new Map();
+    itemsInc.forEach(it => {
+      const f = it.fields;
+      const idColab = String(f[ic('IDColab')] || '').trim();
+      const fecha = (f[ic('Fecha')] || '').slice(0, 10);
+      if (!incCerradosMap.has(idColab)) incCerradosMap.set(idColab, new Map());
+      incCerradosMap.get(idColab).set(fecha, {
+        codigo: f[ic('Codigo')] || '',
+        horaEnt: f[ic('HoraEnt')] || '',
+        horaSal: f[ic('HoraSal')] || '',
+      });
+    });
+
+    const filas = [];
+    porColab.forEach(registros => {
+      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const sesiones = agruparEnSesiones(ordenados);
+
+      const porDiaSesion = new Array(7).fill(null);
+      sesiones.forEach(sesion => {
+        const entrada = sesion.registros[0];
+        const salida = sesion.registros[sesion.registros.length - 1];
+        const hayRealSalida = sesion.registros.length > 1;
+        const fechaReportada = hayRealSalida ? salida.fecha : entrada.fecha;
+        if (fechaReportada < lunesStr || fechaReportada > domingoStr) return;
+        const offsetMs = new Date(fechaReportada + 'T00:00:00Z') - lunes;
+        const idxDia = Math.round(offsetMs / 86400000);
+        if (idxDia < 0 || idxDia > 6) return;
+        porDiaSesion[idxDia] = { entrada, salida, hayRealSalida };
+      });
+
+      if (porDiaSesion.every(d => d === null)) return;
+
+      const primerConDatos = porDiaSesion.find(d => d).entrada;
+      const idColab = primerConDatos.idColab;
+      const cerradoInfo = incCerradosMap.get(idColab);
+      const cerrado = !!cerradoInfo;
+
+      const conteoTurno = {}, conteoArea = {};
+      porDiaSesion.forEach(d => {
+        if (!d) return;
+        conteoTurno[d.entrada.turno] = (conteoTurno[d.entrada.turno] || 0) + 1;
+        conteoArea[d.entrada.area] = (conteoArea[d.entrada.area] || 0) + 1;
+      });
+      const moda = (conteo) => {
+        let mejorValor = null, mejorCount = -1;
+        porDiaSesion.forEach(d => {
+          if (!d) return;
+          const v = conteo === conteoTurno ? d.entrada.turno : d.entrada.area;
+          if (conteo[v] > mejorCount) { mejorCount = conteo[v]; mejorValor = v; }
+        });
+        return mejorValor;
+      };
+
+      const dias = [];
+      for (let i = 0; i < 7; i++) {
+        const fechaDia = new Date(lunes.getTime() + i * 86400000).toISOString().slice(0, 10);
+        if (cerrado) {
+          const reg = cerradoInfo.get(fechaDia);
+          dias.push({ modo: 'cerrado', fecha: fechaDia, registro: reg || null, sesion: porDiaSesion[i] });
+        } else if (porDiaSesion[i]) {
+          dias.push({ modo: 'real', fecha: fechaDia, sesion: porDiaSesion[i] });
+        } else {
+          dias.push({ modo: 'combo', fecha: fechaDia, sesion: null });
+        }
+      }
+
+      filas.push({
+        idColab, nombre: primerConDatos.nombre,
+        turno: moda(conteoTurno), area: moda(conteoArea),
+        biometricoValores: porDiaSesion.filter(Boolean).map(d => d.entrada.biometrico),
+        facilitador: primerConDatos.facilitador, lider: primerConDatos.lider,
+        jornada: primerConDatos.jornada, cerrado, dias,
+      });
+    });
+
+    incFilasDatos = filas;
+    incActualizarOpcionesDropdown();
+    incRenderTabla();
+    status.textContent = '';
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al consultar: ' + err.message;
+  }
+}
+
+function incActualizarOpcionesDropdown(){
+  const campos = [
+    ['incFiltroTurno', 'turno'], ['incFiltroArea', 'area'],
+    ['incFiltroFacilitador', 'facilitador'], ['incFiltroLider', 'lider'], ['incFiltroJornada', 'jornada'],
+  ];
+  campos.forEach(([selectId, key]) => {
+    const select = document.getElementById(selectId);
+    const valorActual = select.value;
+    const valores = [...new Set(incFilasDatos.map(r => r[key]).filter(Boolean))].sort();
+    select.innerHTML = `<option value="">${select.options[0].textContent}</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.value = valorActual;
+  });
+  const selectBio = document.getElementById('incFiltroBiometrico');
+  const valorBio = selectBio.value;
+  const valoresBio = [...new Set(incValoresParaDropdown.map(r => r.biometrico).filter(Boolean))].sort();
+  selectBio.innerHTML = `<option value="">Todos</option>` + valoresBio.map(v => `<option value="${v}">${v}</option>`).join('');
+  selectBio.value = valorBio;
+}
+
+function incObtenerFiltradas(){
+  const idQ = document.getElementById('incFiltroId').value.trim().toLowerCase();
+  const nombreQ = document.getElementById('incFiltroNombre').value.trim().toLowerCase();
+  const turnoQ = document.getElementById('incFiltroTurno').value;
+  const areaQ = document.getElementById('incFiltroArea').value;
+  const biometricoQ = document.getElementById('incFiltroBiometrico').value;
+  const facilitadorQ = document.getElementById('incFiltroFacilitador').value;
+  const liderQ = document.getElementById('incFiltroLider').value;
+  const jornadaQ = document.getElementById('incFiltroJornada').value;
+
+  return incFilasDatos.filter(r =>
+    (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
+    (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
+    (!turnoQ || r.turno === turnoQ) &&
+    (!areaQ || r.area === areaQ) &&
+    (!biometricoQ || r.biometricoValores.includes(biometricoQ)) &&
+    (!facilitadorQ || r.facilitador === facilitadorQ) &&
+    (!liderQ || r.lider === liderQ) &&
+    (!jornadaQ || r.jornada === jornadaQ)
+  ).sort((a, b) => a.idColab.localeCompare(b.idColab));
+}
+
+function incRenderTabla(){
+  const tbody = document.getElementById('incTbody');
+  const note = document.getElementById('incTableNote');
+  const filtradas = incObtenerFiltradas();
+
+  tbody.innerHTML = '';
+  filtradas.forEach(r => {
+    const tr = document.createElement('tr');
+    const celdasDias = r.dias.map((d) => {
+      if (d.modo === 'real') {
+        const s = d.sesion;
+        const texto = s.hayRealSalida
+          ? `<span class="sem-hora-doble"><span>${s.entrada.hora.slice(0,5)}</span><span>${s.salida.hora.slice(0,5)}</span></span>`
+          : `<span class="sem-hora-doble"><span>${s.entrada.hora.slice(0,5)}</span><span>—</span></span>`;
+        return `<td>${texto}</td>`;
+      }
+      if (d.modo === 'cerrado') {
+        const reg = d.registro;
+        if (!reg) return '<td>—</td>';
+        if (reg.codigo === 'A') {
+          return `<td><span class="sem-hora-doble"><span>${(reg.horaEnt||'').slice(0,5)}</span><span>${(reg.horaSal||'').slice(0,5)}</span></span></td>`;
+        }
+        return `<td><span class="inc-codigo-bloqueado">${reg.codigo}</span></td>`;
+      }
+      const opciones = (incCatalogoOpciones || []).map(o =>
+        `<option value="${o.code}" ${o.code === 'F' ? 'selected' : ''}>${o.code} - ${o.label}</option>`
+      ).join('');
+      return `<td><select class="inc-combo" data-idcolab="${r.idColab}" data-fecha="${d.fecha}">${opciones}</select></td>`;
+    }).join('');
+
+    tr.innerHTML = `
+      <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno || ''}</td><td>${r.area || ''}</td>
+      ${celdasDias}
+      <td>${r.jornada || ''}</td>
+      <td class="${r.cerrado ? 'inc-estatus-cerrado' : 'inc-estatus-abierto'}">${r.cerrado ? 'Cerrada' : 'Abierta'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  note.textContent = `${filtradas.length} colaborador(es).`;
+}
+
+async function incEnviarLoteConReintentos(token, ids, lote, intento = 1){
+  const MAX_INTENTOS = 8;
+  const body = {
+    requests: lote.map((fields, j) => ({
+      id: String(j + 1),
+      method: 'POST',
+      url: `/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items`,
+      headers: { 'Content-Type': 'application/json' },
+      body: { fields },
+    })),
+  };
+  let resp;
+  try {
+    resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
+  } catch (e) {
+    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
+      await cdEsperar(1000 * Math.pow(2, intento));
+      return incEnviarLoteConReintentos(token, ids, lote, intento + 1);
+    }
+    return { ok: 0, errores: lote.length };
+  }
+  let ok = 0, errores = 0;
+  const pendientesDe429 = [];
+  resp.responses.forEach(r => {
+    if (r.status >= 200 && r.status < 300) ok++;
+    else if (r.status === 429) pendientesDe429.push(lote[parseInt(r.id, 10) - 1]);
+    else errores++;
+  });
+  if (pendientesDe429.length && intento < MAX_INTENTOS) {
+    await cdEsperar(1000 * Math.pow(2, intento));
+    const reintento = await incEnviarLoteConReintentos(token, ids, pendientesDe429, intento + 1);
+    ok += reintento.ok; errores += reintento.errores;
+  } else {
+    errores += pendientesDe429.length;
+  }
+  return { ok, errores };
+}
+
+document.getElementById('incBtnBuscar').addEventListener('click', incBuscar);
+document.getElementById('incBtnLimpiar').addEventListener('click', () => {
+  ['incFiltroId','incFiltroNombre'].forEach(id => document.getElementById(id).value = '');
+  ['incFiltroTurno','incFiltroArea','incFiltroBiometrico','incFiltroFacilitador','incFiltroLider','incFiltroJornada'].forEach(id => document.getElementById(id).value = '');
+  incRenderTabla();
+});
+['incFiltroId','incFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', incRenderTabla));
+['incFiltroTurno','incFiltroArea','incFiltroBiometrico','incFiltroFacilitador','incFiltroLider','incFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', incRenderTabla));
+
+document.getElementById('incBtnCerrar').addEventListener('click', async () => {
+  const filtradas = incObtenerFiltradas().filter(r => !r.cerrado);
+  if (!filtradas.length) { alert('No hay colaboradores abiertos para cerrar con los filtros actuales.'); return; }
+
+  const confirmacion = confirm(`Vas a cerrar la semana para ${filtradas.length} colaborador(es). Esto crea su registro histórico y ya NO se podrá editar. ¿Continuar?`);
+  if (!confirmacion) return;
+
+  const btn = document.getElementById('incBtnCerrar');
+  btn.disabled = true;
+  const status = document.getElementById('incStatus');
+  try {
+    status.textContent = 'Cerrando semana…';
+    const token = await obtenerTokenGraph();
+    const ids = regIds;
+    const camposMapa = await resolverCamposRegIncidencias(token, ids);
+    const ic = (n) => camposMapa[n] || n;
+    const account = msalInstance.getActiveAccount();
+    const cerradoPor = account ? (account.username || nombreCorto(account)) : '';
+
+    const registrosNuevos = [];
+    filtradas.forEach(r => {
+      r.dias.forEach(d => {
+        if (d.modo === 'real') {
+          const s = d.sesion;
+          registrosNuevos.push({
+            [ic('IDColab')]: r.idColab,
+            [ic('Nombre')]: r.nombre,
+            [ic('Fecha')]: d.fecha + 'T00:00:00Z',
+            [ic('Codigo')]: 'A',
+            [ic('HoraEnt')]: s.entrada.hora.slice(0,5),
+            [ic('HoraSal')]: s.hayRealSalida ? s.salida.hora.slice(0,5) : '',
+            [ic('Semana')]: incSemanaActual.semana,
+            [ic('YearSemana')]: incSemanaActual.year,
+            [ic('CerradoPor')]: cerradoPor,
+          });
+        } else if (d.modo === 'combo') {
+          const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
+          const codigo = select ? select.value : 'F';
+          registrosNuevos.push({
+            [ic('IDColab')]: r.idColab,
+            [ic('Nombre')]: r.nombre,
+            [ic('Fecha')]: d.fecha + 'T00:00:00Z',
+            [ic('Codigo')]: codigo,
+            [ic('HoraEnt')]: '',
+            [ic('HoraSal')]: '',
+            [ic('Semana')]: incSemanaActual.semana,
+            [ic('YearSemana')]: incSemanaActual.year,
+            [ic('CerradoPor')]: cerradoPor,
+          });
+        }
+      });
+    });
+
+    let insertados = 0, errores = 0;
+    const TAM_LOTE = 20;
+    for (let i = 0; i < registrosNuevos.length; i += TAM_LOTE) {
+      const lote = registrosNuevos.slice(i, i + TAM_LOTE);
+      const res = await incEnviarLoteConReintentos(token, ids, lote);
+      insertados += res.ok; errores += res.errores;
+      status.textContent = `Cerrando… ${Math.min(i + TAM_LOTE, registrosNuevos.length)}/${registrosNuevos.length}`;
+      if (i + TAM_LOTE < registrosNuevos.length) await cdEsperar(500);
+    }
+
+    status.textContent = `Listo. ${insertados} registros creados, ${errores} errores.`;
+    await incBuscar();
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Error al cerrar: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('incBtnExcel').addEventListener('click', () => {
+  const filtradas = incObtenerFiltradas();
+  const filas = filtradas.map(r => {
+    const obj = { 'ID Colaborador': r.idColab, 'Nombre': r.nombre, 'Turno': r.turno, 'Área': r.area };
+    r.dias.forEach((d, idx) => {
+      let valor = '';
+      if (d.modo === 'real') {
+        valor = d.sesion.hayRealSalida
+          ? `${d.sesion.entrada.hora.slice(0,5)}-${d.sesion.salida.hora.slice(0,5)}`
+          : `${d.sesion.entrada.hora.slice(0,5)}-—`;
+      } else if (d.modo === 'cerrado') {
+        const reg = d.registro;
+        valor = reg ? (reg.codigo === 'A' ? `${(reg.horaEnt||'').slice(0,5)}-${(reg.horaSal||'').slice(0,5)}` : reg.codigo) : '';
+      } else {
+        const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
+        valor = select ? select.value : 'F';
+      }
+      obj[DIAS_SEMANA[idx]] = valor;
+    });
+    obj['Jornada'] = r.jornada;
+    obj['Estatus'] = r.cerrado ? 'Cerrada' : 'Abierta';
+    return obj;
+  });
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Incidencias');
+  XLSX.writeFile(libro, `Registro_Incidencias_${new Date().toISOString().slice(0,10)}.xlsx`);
+});
+
 </script>
 
 </body>
