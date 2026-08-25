@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v39]</title>
+<title>Biométricos Colaboradores | Ubictum [v40]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -488,10 +488,10 @@
   <button class="tabbtn active" data-tab="registros" type="button">Registros</button>
   <button class="tabbtn" data-tab="dia" type="button">Registros por Día</button>
   <button class="tabbtn" data-tab="semana" type="button">Registros por Semana</button>
-  <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
+  <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v39</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v40</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -660,28 +660,6 @@
     </div>
     <button class="cd-btn" id="cdBtnSubir" type="button">Subir a SharePoint</button>
     <div class="cd-log" id="cdLog" style="margin-top:14px;"></div>
-  </div>
-
-  <div class="card" style="margin-top:24px;">
-    <h2 style="font-size:17px; margin-bottom:6px;">Carga de Catálogo de Colaboradores (CatColab)</h2>
-    <p style="font-size:13px; color:var(--gris,#636469); margin-bottom:14px;">Sube el Excel de RH (columnas PUESTO, NO EMPLEADO, NOMBRE, FACILITADOR, LIDER, NUEVA JORNADA, DESCANSOS) — actualiza a los colaboradores que ya existan por IDColab y agrega a los nuevos, sin duplicar.</p>
-    <input type="file" id="catFileInput" accept=".xlsx,.xls" class="hidden">
-    <button class="cd-btn" id="catBtnSubir" type="button">Subir catálogo</button>
-    <span class="filename" id="catFilename" style="margin-left:10px;"></span>
-    <div class="cd-summary" id="catResultsBlock" style="margin-top:16px; display:none; grid-template-columns:repeat(4,1fr);">
-      <div class="cd-box"><div class="n" id="catLeidos">0</div><div class="l">Renglones leídos</div></div>
-      <div class="cd-box"><div class="n" id="catNuevos">0</div><div class="l">Colaboradores nuevos</div></div>
-      <div class="cd-box"><div class="n" id="catActualizados">0</div><div class="l">Actualizados</div></div>
-      <div class="cd-box"><div class="n" id="catErrores">0</div><div class="l">Errores</div></div>
-    </div>
-    <div class="cd-log" id="catLog" style="margin-top:14px; display:none;"></div>
-  </div>
-
-  <div class="card" style="margin-top:24px; border-color:#e0a; background:#fff5f5;">
-    <p style="font-weight:700; color:#8a1f1f; margin-bottom:6px;">⚠ Utilidad temporal — vaciar RegBio26</p>
-    <p style="font-size:13px; color:#5a3a3a; margin-bottom:12px;">Borra TODOS los renglones de la lista RegBio26 vía API (rápido, no depende de la vista de cuadrícula de SharePoint). Úsala para el reinicio de esta semana y luego avísame para quitarla de nuevo. Pide confirmación antes de borrar.</p>
-    <button class="cd-btn" id="cdBtnVaciar" type="button" style="background:#b3413f;">Vaciar RegBio26</button>
-    <div class="cd-log" id="cdLogVaciar" style="margin-top:14px; display:none;"></div>
   </div>
 </div><!-- /tab-carga -->
 
@@ -2416,284 +2394,6 @@ document.getElementById('bioBtnLimpiar').addEventListener('click', () => {
 ['bioFiltroTurno','bioFiltroArea','bioFiltroFacilitador','bioFiltroLider','bioFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', bioRenderTabla));
 
 /* ============================================================
- * CARGA DE CATÁLOGO — CatColab (upsert por IDColab)
- * ------------------------------------------------------------
- * A diferencia de la carga de checadas (que siempre inserta y
- * nunca duplica por Llave), aquí cada colaborador debe existir
- * UNA sola vez: si ya está en CatColab se actualiza (PATCH), si
- * no existe se crea (POST). Mismo patrón de lotes + reintento
- * con backoff que ya usamos para RegBio26.
- * ============================================================ */
-function catLog(msg){
-  const el = document.getElementById('catLog');
-  el.style.display = 'block';
-  el.textContent += msg + '\n';
-  el.scrollTop = el.scrollHeight;
-}
-
-async function resolverCamposCatColab(token, ids){
-  const cols = await graphFetchAll(
-    `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catColab}/columns?$select=name,displayName`, token
-  );
-  const mapa = {};
-  cols.forEach(c => { mapa[c.displayName] = c.name; });
-  return mapa;
-}
-
-function leerExcelCatalogo(wb){
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
-  const headerIdx = rows.findIndex(r => r && r.some(v => String(v || '').trim().toUpperCase() === 'NO EMPLEADO'));
-  if (headerIdx === -1) throw new Error('No se encontró el encabezado "NO EMPLEADO" en el excel.');
-  const header = rows[headerIdx].map(v => String(v || '').trim().toUpperCase());
-  const idx = {
-    puesto: header.indexOf('PUESTO'),
-    idColab: header.indexOf('NO EMPLEADO'),
-    nombre: header.indexOf('NOMBRE'),
-    facilitador: header.indexOf('FACILITADOR'),
-    lider: header.indexOf('LIDER'),
-    jornada: header.indexOf('NUEVA JORNADA'),
-    descansos: header.indexOf('DESCANSOS'),
-  };
-  const dataRows = rows.slice(headerIdx + 1);
-  const registros = [];
-  dataRows.forEach(r => {
-    if (!r || r[idx.idColab] == null) return;
-    registros.push({
-      idColab: String(r[idx.idColab]).trim(),
-      nombre: String(r[idx.nombre] || '').trim(),
-      facilitador: String(r[idx.facilitador] || '').trim(),
-      lider: String(r[idx.lider] || '').trim(),
-      puesto: String(r[idx.puesto] || '').trim(),
-      jornada: String(r[idx.jornada] || '').trim(),
-      descansos: String(r[idx.descansos] || '').trim(),
-    });
-  });
-  return registros;
-}
-
-async function enviarLoteCatalogoConReintentos(token, ids, lote, intento = 1){
-  const MAX_INTENTOS = 8;
-  const body = {
-    requests: lote.map((op, j) => ({
-      id: String(j + 1),
-      method: op.method,
-      url: op.method === 'PATCH'
-        ? `/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items/${op.itemId}/fields`
-        : `/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items`,
-      headers: { 'Content-Type': 'application/json' },
-      body: op.method === 'PATCH' ? op.fields : { fields: op.fields },
-    })),
-  };
-  let resp;
-  try {
-    resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
-  } catch (e) {
-    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
-      const espera = 1000 * Math.pow(2, intento);
-      catLog(`Límite de ritmo, reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
-      await cdEsperar(espera);
-      return enviarLoteCatalogoConReintentos(token, ids, lote, intento + 1);
-    }
-    return { ok: 0, errores: lote.length };
-  }
-  let ok = 0, errores = 0;
-  const pendientesDe429 = [];
-  let primerError = null;
-  resp.responses.forEach(r => {
-    if (r.status >= 200 && r.status < 300) ok++;
-    else if (r.status === 429) pendientesDe429.push(lote[parseInt(r.id, 10) - 1]);
-    else { errores++; if (!primerError) primerError = r; }
-  });
-  if (primerError) catLog('Detalle del error: ' + JSON.stringify(primerError.body || primerError));
-  if (pendientesDe429.length && intento < MAX_INTENTOS) {
-    const espera = 1000 * Math.pow(2, intento);
-    await cdEsperar(espera);
-    const reintento = await enviarLoteCatalogoConReintentos(token, ids, pendientesDe429, intento + 1);
-    ok += reintento.ok; errores += reintento.errores;
-  } else {
-    errores += pendientesDe429.length;
-  }
-  return { ok, errores };
-}
-
-document.getElementById('catBtnSubir').addEventListener('click', () => {
-  document.getElementById('catFileInput').click();
-});
-
-document.getElementById('catFileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  document.getElementById('catFilename').textContent = file.name;
-  document.getElementById('catLog').textContent = '';
-  document.getElementById('catLog').style.display = 'block';
-  document.getElementById('catResultsBlock').style.display = '';
-  ['catLeidos','catNuevos','catActualizados','catErrores'].forEach(id => document.getElementById(id).textContent = '0');
-
-  const btn = document.getElementById('catBtnSubir');
-  btn.disabled = true;
-  try {
-    catLog('Leyendo excel…');
-    const buffer = await file.arrayBuffer();
-    const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
-    const registros = leerExcelCatalogo(wb);
-    document.getElementById('catLeidos').textContent = registros.length;
-    catLog(`${registros.length} colaboradores leídos del excel.`);
-
-    const token = await obtenerTokenGraph();
-    const ids = await resolverGraphIds(token);
-    const camposMapa = await resolverCamposCatColab(token, ids);
-    const cc = (n) => camposMapa[n] || n;
-
-    catLog('Consultando colaboradores ya existentes en CatColab…');
-    const existentes = await graphFetchAll(
-      `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items?expand=fields(select=${cc('IDColab')})&$top=2000`, token
-    );
-    const mapaExistentes = new Map(); // idColab -> itemId
-    existentes.forEach(it => {
-      const idColab = it.fields[cc('IDColab')];
-      if (idColab) mapaExistentes.set(String(idColab).trim(), it.id);
-    });
-    catLog(`${mapaExistentes.size} colaboradores ya existían en CatColab.`);
-
-    const operaciones = registros.map(r => {
-      const fields = {
-        [cc('IDColab')]: r.idColab,
-        [cc('Nombre')]: r.nombre,
-        [cc('Facilitador')]: r.facilitador,
-        [cc('Lider')]: r.lider,
-        [cc('Puesto')]: r.puesto,
-        [cc('Jornada')]: r.jornada,
-        [cc('Descansos')]: r.descansos,
-        [cc('Estatus')]: 'Alta',
-      };
-      const itemId = mapaExistentes.get(r.idColab);
-      return itemId
-        ? { method: 'PATCH', itemId, fields }
-        : { method: 'POST', fields };
-    });
-
-    let nuevos = 0, actualizados = 0, errores = 0;
-    const TAM_LOTE = 20;
-    for (let i = 0; i < operaciones.length; i += TAM_LOTE) {
-      const lote = operaciones.slice(i, i + TAM_LOTE);
-      const res = await enviarLoteCatalogoConReintentos(token, ids, lote);
-      lote.forEach((op, j) => {
-        // aproximación: si el lote completo tuvo éxito, contamos por tipo
-      });
-      const nuevosLote = lote.filter(o => o.method === 'POST').length;
-      const actLote = lote.filter(o => o.method === 'PATCH').length;
-      const proporcionOk = res.ok / lote.length;
-      nuevos += Math.round(nuevosLote * proporcionOk);
-      actualizados += Math.round(actLote * proporcionOk);
-      errores += res.errores;
-      catLog(`Progreso: ${Math.min(i + TAM_LOTE, operaciones.length)}/${operaciones.length}`);
-      if (i + TAM_LOTE < operaciones.length) await cdEsperar(500);
-    }
-
-    document.getElementById('catNuevos').textContent = nuevos;
-    document.getElementById('catActualizados').textContent = actualizados;
-    document.getElementById('catErrores').textContent = errores;
-    catLog(`Listo. ${nuevos} nuevos, ${actualizados} actualizados, ${errores} errores.`);
-
-    // Refrescar el catálogo en memoria para que Carga de Data lo use actualizado.
-    cdCatColab = null;
-  } catch (err) {
-    console.error(err);
-    catLog('ERROR: ' + err.message);
-  } finally {
-    btn.disabled = false;
-    document.getElementById('catFileInput').value = '';
-  }
-});
-
-/* ============================================================
- * UTILIDAD TEMPORAL — vaciar RegBio26
- * ============================================================ */
-function cdLogVaciar(msg){
-  const el = document.getElementById('cdLogVaciar');
-  el.style.display = 'block';
-  el.textContent += msg + '\n';
-  el.scrollTop = el.scrollHeight;
-}
-
-async function eliminarLoteConReintentos(token, ids, lote, intento = 1){
-  const MAX_INTENTOS = 8;
-  const body = {
-    requests: lote.map((itemId, j) => ({
-      id: String(j + 1),
-      method: 'DELETE',
-      url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items/${itemId}`,
-    })),
-  };
-  let resp;
-  try {
-    resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
-  } catch (e) {
-    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
-      const espera = 1000 * Math.pow(2, intento);
-      cdLogVaciar(`Límite de ritmo, reintentando lote en ${espera/1000}s…`);
-      await cdEsperar(espera);
-      return eliminarLoteConReintentos(token, ids, lote, intento + 1);
-    }
-    return { eliminados: 0, errores: lote.length };
-  }
-  let eliminados = 0, errores = 0;
-  const pendientesDe429 = [];
-  resp.responses.forEach(r => {
-    if (r.status >= 200 && r.status < 300) eliminados++;
-    else if (r.status === 429) pendientesDe429.push(lote[parseInt(r.id, 10) - 1]);
-    else errores++;
-  });
-  if (pendientesDe429.length && intento < MAX_INTENTOS) {
-    const espera = 1000 * Math.pow(2, intento);
-    await cdEsperar(espera);
-    const reintento = await eliminarLoteConReintentos(token, ids, pendientesDe429, intento + 1);
-    eliminados += reintento.eliminados; errores += reintento.errores;
-  } else {
-    errores += pendientesDe429.length;
-  }
-  return { eliminados, errores };
-}
-
-document.getElementById('cdBtnVaciar').addEventListener('click', async () => {
-  const confirmacion = prompt('Esto borra TODOS los renglones de RegBio26 y no se puede deshacer.\nEscribe VACIAR para confirmar:');
-  if (confirmacion !== 'VACIAR') return;
-
-  const btn = document.getElementById('cdBtnVaciar');
-  btn.disabled = true;
-  document.getElementById('cdLogVaciar').textContent = '';
-  document.getElementById('cdLogVaciar').style.display = 'block';
-  try {
-    const token = await obtenerTokenGraph();
-    const ids = await resolverGraphIds(token);
-
-    cdLogVaciar('Obteniendo todos los IDs de renglones…');
-    const items = await graphFetchAll(
-      `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items?$select=id&$top=2000`, token
-    );
-    const idsRenglones = items.map(it => it.id);
-    cdLogVaciar(`${idsRenglones.length} renglones encontrados. Borrando…`);
-
-    let eliminados = 0, errores = 0;
-    const TAM_LOTE = 20;
-    for (let i = 0; i < idsRenglones.length; i += TAM_LOTE) {
-      const lote = idsRenglones.slice(i, i + TAM_LOTE);
-      const res = await eliminarLoteConReintentos(token, ids, lote);
-      eliminados += res.eliminados; errores += res.errores;
-      cdLogVaciar(`Progreso: ${Math.min(i + TAM_LOTE, idsRenglones.length)}/${idsRenglones.length}`);
-      if (i + TAM_LOTE < idsRenglones.length) await cdEsperar(500);
-    }
-    cdLogVaciar(`Listo. ${eliminados} eliminados, ${errores} errores.`);
-  } catch (err) {
-    console.error(err);
-    cdLogVaciar('ERROR: ' + err.message);
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-/* ============================================================
  * PESTAÑA REGISTRO INCIDENCIAS
  * ------------------------------------------------------------
  * Misma base que Registros por Semana (checadas reales de
@@ -2972,7 +2672,7 @@ function incRenderTabla(){
         return `<td><span class="inc-codigo-bloqueado">${reg.codigo}</span></td>`;
       }
       const opciones = (incCatalogoOpciones || []).map(o =>
-        `<option value="${o.code}" ${o.code === 'F' ? 'selected' : ''}>${o.code} - ${o.label}</option>`
+        `<option value="${o.code}" ${o.code === 'F' ? 'selected' : ''}>${o.code}</option>`
       ).join('');
       return `<td><select class="inc-combo" data-idcolab="${r.idColab}" data-fecha="${d.fecha}">${opciones}</select></td>`;
     }).join('');
