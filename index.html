@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v41]</title>
+<title>Biométricos Colaboradores | Ubictum [v42]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -491,7 +491,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v41</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v42</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -773,9 +773,12 @@
     <div class="reg-campo reg-botones">
       <button class="cd-btn" id="incBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="incBtnLimpiar" type="button">Limpiar filtros</button>
-      <button class="cd-btn" id="incBtnCerrar" type="button" style="margin-left:14px;">Cerrar Semana</button>
-      <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
     </div>
+  </div>
+
+  <div style="display:flex; gap:10px; margin:14px 0;">
+    <button class="cd-btn" id="incBtnCerrar" type="button">Cerrar Semana</button>
+    <button class="ghost" id="incBtnExcel" type="button">Descargar Excel</button>
   </div>
 
   <div class="status-row">
@@ -2499,7 +2502,13 @@ async function incBuscar(){
     });
 
     const camposInc = ['IDColab','Fecha','Codigo','HoraEnt','HoraSal'].map(n => ic(n)).join(',');
-    const filtroInc = encodeURIComponent(`fields/${ic('Fecha')} ge '${lunes.toISOString()}' and fields/${ic('Fecha')} le '${domingo.toISOString()}'`);
+    // Margen de 1 día de cada lado, mismo criterio que ya usamos en RegBio26 —
+    // como los registros ahora se guardan a mediodía UTC, este margen sobra
+    // de más, pero es la práctica consistente en toda la app contra el
+    // desfase de zona horaria del sitio.
+    const desdeIncAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
+    const hastaIncAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
+    const filtroInc = encodeURIComponent(`fields/${ic('Fecha')} ge '${desdeIncAmpliado}' and fields/${ic('Fecha')} le '${hastaIncAmpliado}'`);
     const urlInc = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.regIncidencias}/items?expand=fields(select=${camposInc})&$filter=${filtroInc}&$top=5000`;
     const itemsInc = await graphFetchAll(urlInc, token);
     incCerradosMap = new Map();
@@ -2750,7 +2759,7 @@ document.getElementById('incBtnCerrar').addEventListener('click', async () => {
           registrosNuevos.push({
             [ic('IDColab')]: r.idColab,
             [ic('Nombre')]: r.nombre,
-            [ic('Fecha')]: d.fecha + 'T00:00:00Z',
+            [ic('Fecha')]: d.fecha + 'T12:00:00Z',
             [ic('Codigo')]: 'A',
             [ic('HoraEnt')]: s.entrada.hora.slice(0,5),
             [ic('HoraSal')]: s.hayRealSalida ? s.salida.hora.slice(0,5) : '',
@@ -2764,7 +2773,7 @@ document.getElementById('incBtnCerrar').addEventListener('click', async () => {
           registrosNuevos.push({
             [ic('IDColab')]: r.idColab,
             [ic('Nombre')]: r.nombre,
-            [ic('Fecha')]: d.fecha + 'T00:00:00Z',
+            [ic('Fecha')]: d.fecha + 'T12:00:00Z',
             [ic('Codigo')]: codigo,
             [ic('HoraEnt')]: '',
             [ic('HoraSal')]: '',
