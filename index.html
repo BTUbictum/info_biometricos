@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v58]</title>
+<title>Biométricos Colaboradores | Ubictum [v59]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v58</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v59</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2956,16 +2956,27 @@ function incConstruirOperaciones(filtradas, cerrando, ic){
     const eraCerrada = r.estatus === 'cerrada'; // Admin corrigiendo una semana ya cerrada
 
     r.dias.forEach(d => {
-      if (!d.puedeEditar) return;
-      const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
-      if (!select) return;
-      const codigo = select.value;
+      let codigo, horaEnt = '', horaSal = '';
 
-      let horaEnt = '', horaSal = '';
-      if (d.baseValor.tipo === 'real' && codigo === 'A') {
+      if (d.baseValor.tipo === 'real' && !d.puedeEditar) {
+        // El colaborador sí checó ese día, pero este usuario (no elevado) no
+        // tiene combo para elegir ahí — igual se registra automático como
+        // Asistencia, con sus horas reales, para que los 7 días queden
+        // completos desde el primer Guardar sin importar quién lo hizo.
         const s = d.sesionReal;
+        codigo = 'A';
         horaEnt = s.entrada.biometrico === 'Door_Panorama Comedor' ? '' : s.entrada.hora.slice(0,5);
         horaSal = (!s.hayRealSalida || s.salida.biometrico === 'Door_Panorama Comedor') ? '' : s.salida.hora.slice(0,5);
+      } else {
+        if (!d.puedeEditar) return;
+        const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
+        if (!select) return;
+        codigo = select.value;
+        if (d.baseValor.tipo === 'real' && codigo === 'A') {
+          const s = d.sesionReal;
+          horaEnt = s.entrada.biometrico === 'Door_Panorama Comedor' ? '' : s.entrada.hora.slice(0,5);
+          horaSal = (!s.hayRealSalida || s.salida.biometrico === 'Door_Panorama Comedor') ? '' : s.salida.hora.slice(0,5);
+        }
       }
 
       const fields = {
