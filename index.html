@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v52]</title>
+<title>Biométricos Colaboradores | Ubictum [v53]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v52</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v53</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2905,23 +2905,24 @@ async function incEnviarLoteConReintentos(token, ids, lote, intento = 1){
       await cdEsperar(1000 * Math.pow(2, intento));
       return incEnviarLoteConReintentos(token, ids, lote, intento + 1);
     }
-    return { ok: 0, errores: lote.length };
+    return { ok: 0, errores: lote.length, primerError: e.message };
   }
-  let ok = 0, errores = 0;
+  let ok = 0, errores = 0, primerError = null;
   const pendientesDe429 = [];
   resp.responses.forEach(r => {
     if (r.status >= 200 && r.status < 300) ok++;
     else if (r.status === 429) pendientesDe429.push(lote[parseInt(r.id, 10) - 1]);
-    else errores++;
+    else { errores++; if (!primerError) primerError = `HTTP ${r.status}: ${JSON.stringify(r.body)}`; }
   });
   if (pendientesDe429.length && intento < MAX_INTENTOS) {
     await cdEsperar(1000 * Math.pow(2, intento));
     const reintento = await incEnviarLoteConReintentos(token, ids, pendientesDe429, intento + 1);
     ok += reintento.ok; errores += reintento.errores;
+    if (reintento.primerError && !primerError) primerError = reintento.primerError;
   } else {
     errores += pendientesDe429.length;
   }
-  return { ok, errores };
+  return { ok, errores, primerError };
 }
 
 document.getElementById('incBtnBuscar').addEventListener('click', incBuscar);
@@ -3010,31 +3011,39 @@ async function incGuardarOCerrar(cerrando){
     const ic = (n) => camposMapa[n] || n;
 
     const { operaciones, omitidosSinGuardar } = incConstruirOperaciones(filtradas, cerrando, ic);
+    console.log('[Incidencias] operaciones a enviar:', operaciones);
 
     if (!operaciones.length) {
-      status.textContent = omitidosSinGuardar.length
+      const msg = omitidosSinGuardar.length
         ? `Nada que hacer — primero guarda antes de cerrar (${omitidosSinGuardar.join(', ')}).`
-        : 'No había nada editable para guardar con los filtros actuales.';
+        : 'No había nada editable para guardar con los filtros actuales (revisa que el combo esté visible y que tu rol pueda editar ese día).';
+      status.textContent = msg;
+      alert(msg);
       return;
     }
 
     let ok = 0, errores = 0;
+    let primerError = null;
     const TAM_LOTE = 20;
     for (let i = 0; i < operaciones.length; i += TAM_LOTE) {
       const lote = operaciones.slice(i, i + TAM_LOTE);
       const res = await incEnviarLoteConReintentos(token, ids, lote);
       ok += res.ok; errores += res.errores;
+      if (res.primerError && !primerError) primerError = res.primerError;
       status.textContent = `${cerrando ? 'Cerrando' : 'Guardando'}… ${Math.min(i + TAM_LOTE, operaciones.length)}/${operaciones.length}`;
       if (i + TAM_LOTE < operaciones.length) await cdEsperar(500);
     }
 
     let mensaje = `Listo. ${ok} registros ${cerrando ? 'cerrados' : 'guardados'}, ${errores} errores.`;
     if (omitidosSinGuardar.length) mensaje += ` Se omitieron (sin guardado previo): ${omitidosSinGuardar.join(', ')}.`;
+    if (primerError) { mensaje += ` Detalle del primer error: ${primerError}`; console.error('[Incidencias] primer error de guardado:', primerError); }
     status.textContent = mensaje;
+    alert(mensaje);
     await incBuscar();
   } catch (err) {
     console.error(err);
     status.textContent = 'Error: ' + err.message;
+    alert('Error: ' + err.message);
   } finally {
     btnGuardar.disabled = false; btnCerrar.disabled = false;
   }
