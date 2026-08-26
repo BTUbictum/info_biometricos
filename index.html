@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v54]</title>
+<title>Biométricos Colaboradores | Ubictum [v55]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v54</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v55</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -741,7 +741,7 @@
   </div>
 
   <div id="incContenido">
-  <p class="lead">Los días sin checada real muestran un combo (F por default) — así se captura Falta/Asistencia/Permiso/Incapacidad/Vacaciones/Descanso. Al cerrar la semana queda bloqueada para siempre para los colaboradores filtrados.</p>
+
   <p id="incQuienSoy" style="font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--gris,#636469); margin-top:-8px; margin-bottom:16px;"></p>
 
   <div class="reg-filtros">
@@ -2858,9 +2858,16 @@ function incRenderTabla(){
         codigoDefault = esDescanso ? 'D' : 'F';
       }
 
+      // El código actual (ya guardado, o el default F/D) SIEMPRE se incluye como
+      // opción y queda preseleccionado, aunque no sea de los que el rol puede
+      // elegir libremente — así nadie sobreescribe por accidente un día que no
+      // tocó, solo por no tener ese código entre sus opciones permitidas.
+      const codigosDisponibles = new Set(codigosPermitidos);
+      codigosDisponibles.add(codigoDefault);
+
       const opciones = (incCatalogoOpciones || []).filter(o => {
-        if (!codigosPermitidos.has(o.code)) return false; // según la matriz de roles
-        if (o.code === 'V' && !d.permiteV) return false; // Vacaciones: solo hoy/ayer
+        if (!codigosDisponibles.has(o.code)) return false;
+        if (o.code === 'V' && !d.permiteV && o.code !== codigoDefault) return false; // Vacaciones: solo hoy/ayer
         return true;
       }).map(o =>
         `<option value="${o.code}" ${o.code === codigoDefault ? 'selected' : ''}>${o.code}</option>`
@@ -2994,33 +3001,41 @@ async function incGuardarOCerrar(cerrando){
   const filtradas = incObtenerFiltradas();
   if (!filtradas.length) { alert('No hay colaboradores para guardar con los filtros actuales.'); return; }
 
-  const mensajeConfirmacion = cerrando
-    ? `Vas a CERRAR la semana para los colaboradores filtrados que ya tengan un Guardado previo. Después de cerrar, ya no se podrán editar (salvo Admin). ¿Continuar?`
-    : `Vas a guardar los cambios de los colaboradores filtrados. La semana sigue abierta para seguir corrigiendo. ¿Continuar?`;
-  if (!confirm(mensajeConfirmacion)) return;
-
   const btnGuardar = document.getElementById('incBtnGuardar');
   const btnCerrar = document.getElementById('incBtnCerrar');
-  btnGuardar.disabled = true; btnCerrar.disabled = true;
   const status = document.getElementById('incStatus');
+
+  let token, ids, camposMapa, ic, operaciones, omitidosSinGuardar;
+  try {
+    token = await obtenerTokenGraph();
+    ids = regIds;
+    camposMapa = await resolverCamposRegIncidencias(token, ids);
+    ic = (n) => camposMapa[n] || n;
+    ({ operaciones, omitidosSinGuardar } = incConstruirOperaciones(filtradas, cerrando, ic));
+    console.log('[Incidencias] operaciones a enviar:', operaciones);
+  } catch (err) {
+    console.error(err);
+    alert('Error preparando los cambios: ' + err.message);
+    return;
+  }
+
+  if (!operaciones.length) {
+    const msg = omitidosSinGuardar.length
+      ? `Nada que hacer — primero guarda antes de cerrar (${omitidosSinGuardar.join(', ')}).`
+      : 'No había nada editable para guardar con los filtros actuales (revisa que el combo esté visible y que tu rol pueda editar ese día).';
+    status.textContent = msg;
+    alert(msg);
+    return;
+  }
+
+  const mensajeConfirmacion = cerrando
+    ? `Vas a CERRAR la semana y afectar ${operaciones.length} registro(s) de día. Después de cerrar, ya no se podrán editar (salvo roles elevados). ¿Continuar?`
+    : `Vas a guardar y afectar ${operaciones.length} registro(s) de día. ¿Continuar?`;
+  if (!confirm(mensajeConfirmacion)) return;
+
+  btnGuardar.disabled = true; btnCerrar.disabled = true;
   try {
     status.textContent = cerrando ? 'Cerrando semana…' : 'Guardando…';
-    const token = await obtenerTokenGraph();
-    const ids = regIds;
-    const camposMapa = await resolverCamposRegIncidencias(token, ids);
-    const ic = (n) => camposMapa[n] || n;
-
-    const { operaciones, omitidosSinGuardar } = incConstruirOperaciones(filtradas, cerrando, ic);
-    console.log('[Incidencias] operaciones a enviar:', operaciones);
-
-    if (!operaciones.length) {
-      const msg = omitidosSinGuardar.length
-        ? `Nada que hacer — primero guarda antes de cerrar (${omitidosSinGuardar.join(', ')}).`
-        : 'No había nada editable para guardar con los filtros actuales (revisa que el combo esté visible y que tu rol pueda editar ese día).';
-      status.textContent = msg;
-      alert(msg);
-      return;
-    }
 
     let ok = 0, errores = 0;
     let primerError = null;
