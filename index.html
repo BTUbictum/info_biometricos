@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v55]</title>
+<title>Biométricos Colaboradores | Ubictum [v56]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v55</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v56</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2977,7 +2977,8 @@ function incConstruirOperaciones(filtradas, cerrando, ic){
         [ic('YearSemana')]: incSemanaActual.year,
       };
       if (eraCerrada) {
-        fields[ic('ModificadoPorTyC')] = usuario.correo;
+        const rolActuando = usuario.esAdmin ? 'Admin' : (usuario.roles.has('TyC') ? 'TyC' : 'Enfermera');
+        fields[ic('ModificadoPorTyC')] = `${usuario.correo} (${rolActuando})`;
       } else {
         fields[ic('GuardadoPor')] = usuario.correo;
       }
@@ -2999,7 +3000,7 @@ function incConstruirOperaciones(filtradas, cerrando, ic){
 async function incGuardarOCerrar(cerrando){
   if (!incUsuarioActual.tieneAccesoTab) return;
   const filtradas = incObtenerFiltradas();
-  if (!filtradas.length) { alert('No hay colaboradores para guardar con los filtros actuales.'); return; }
+  if (!filtradas.length) { await incAvisar('No hay colaboradores para guardar con los filtros actuales.'); return; }
 
   const btnGuardar = document.getElementById('incBtnGuardar');
   const btnCerrar = document.getElementById('incBtnCerrar');
@@ -3015,7 +3016,7 @@ async function incGuardarOCerrar(cerrando){
     console.log('[Incidencias] operaciones a enviar:', operaciones);
   } catch (err) {
     console.error(err);
-    alert('Error preparando los cambios: ' + err.message);
+    await incAvisar('Error preparando los cambios: ' + err.message);
     return;
   }
 
@@ -3024,14 +3025,14 @@ async function incGuardarOCerrar(cerrando){
       ? `Nada que hacer — primero guarda antes de cerrar (${omitidosSinGuardar.join(', ')}).`
       : 'No había nada editable para guardar con los filtros actuales (revisa que el combo esté visible y que tu rol pueda editar ese día).';
     status.textContent = msg;
-    alert(msg);
+    await incAvisar(msg);
     return;
   }
 
   const mensajeConfirmacion = cerrando
     ? `Vas a CERRAR la semana y afectar ${operaciones.length} registro(s) de día. Después de cerrar, ya no se podrán editar (salvo roles elevados). ¿Continuar?`
     : `Vas a guardar y afectar ${operaciones.length} registro(s) de día. ¿Continuar?`;
-  if (!confirm(mensajeConfirmacion)) return;
+  if (!(await incConfirmar(mensajeConfirmacion))) return;
 
   btnGuardar.disabled = true; btnCerrar.disabled = true;
   try {
@@ -3053,12 +3054,12 @@ async function incGuardarOCerrar(cerrando){
     if (omitidosSinGuardar.length) mensaje += ` Se omitieron (sin guardado previo): ${omitidosSinGuardar.join(', ')}.`;
     if (primerError) { mensaje += ` Detalle del primer error: ${primerError}`; console.error('[Incidencias] primer error de guardado:', primerError); }
     status.textContent = mensaje;
-    alert(mensaje);
+    await incAvisar(mensaje);
     await incBuscar();
   } catch (err) {
     console.error(err);
     status.textContent = 'Error: ' + err.message;
-    alert('Error: ' + err.message);
+    await incAvisar('Error: ' + err.message);
   } finally {
     btnGuardar.disabled = false; btnCerrar.disabled = false;
   }
@@ -3102,7 +3103,65 @@ document.getElementById('incBtnExcel').addEventListener('click', () => {
   XLSX.writeFile(libro, `Registro_Incidencias_${new Date().toISOString().slice(0,10)}.xlsx`);
 });
 
+/* ============================================================
+ * MODAL PROPIO — reemplaza confirm()/alert() nativos
+ * ------------------------------------------------------------
+ * Firefox (y otros navegadores) pueden ofrecer "no volver a
+ * mostrar diálogos de esta página" tras varios confirm() seguidos;
+ * si el usuario lo marca, confirm() deja de funcionar en silencio
+ * (siempre regresa false) sin avisar. Con un modal propio evitamos
+ * depender de esa función del navegador.
+ * ============================================================ */
+function incConfirmar(mensaje){
+  return new Promise(resolve => {
+    const fondo = document.getElementById('incModalFondo');
+    document.getElementById('incModalMensaje').textContent = mensaje;
+    const btnAceptar = document.getElementById('incModalAceptar');
+    const btnCancelar = document.getElementById('incModalCancelar');
+    btnCancelar.style.display = '';
+    btnAceptar.textContent = 'Aceptar';
+    fondo.style.display = 'flex';
+    const limpiar = () => {
+      fondo.style.display = 'none';
+      btnAceptar.removeEventListener('click', onAceptar);
+      btnCancelar.removeEventListener('click', onCancelar);
+    };
+    const onAceptar = () => { limpiar(); resolve(true); };
+    const onCancelar = () => { limpiar(); resolve(false); };
+    btnAceptar.addEventListener('click', onAceptar);
+    btnCancelar.addEventListener('click', onCancelar);
+  });
+}
+
+function incAvisar(mensaje){
+  return new Promise(resolve => {
+    const fondo = document.getElementById('incModalFondo');
+    document.getElementById('incModalMensaje').textContent = mensaje;
+    const btnAceptar = document.getElementById('incModalAceptar');
+    const btnCancelar = document.getElementById('incModalCancelar');
+    btnCancelar.style.display = 'none';
+    btnAceptar.textContent = 'Entendido';
+    fondo.style.display = 'flex';
+    const onAceptar = () => {
+      fondo.style.display = 'none';
+      btnAceptar.removeEventListener('click', onAceptar);
+      resolve();
+    };
+    btnAceptar.addEventListener('click', onAceptar);
+  });
+}
+
 </script>
+
+<div id="incModalFondo" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; max-width:420px; width:90%; padding:26px; box-shadow:0 12px 40px rgba(0,0,0,.25); font-family:'Inter',sans-serif;">
+    <p id="incModalMensaje" style="font-size:14.5px; color:#111; line-height:1.5; margin-bottom:22px; white-space:pre-line;"></p>
+    <div id="incModalBotones" style="display:flex; gap:10px; justify-content:flex-end;">
+      <button class="ghost" id="incModalCancelar" type="button" style="display:none;">Cancelar</button>
+      <button class="cd-btn" id="incModalAceptar" type="button">Aceptar</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
