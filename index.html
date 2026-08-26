@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v53]</title>
+<title>Biométricos Colaboradores | Ubictum [v54]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v53</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v54</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2645,7 +2645,7 @@ async function incBuscar(){
         incCerradosMap.set(idColab, { cerrado: false, guardadoPor: '', modificadoPorTyC: '', porFecha: new Map() });
       }
       const info = incCerradosMap.get(idColab);
-      if (f[ic('Cerrado')]) info.cerrado = true;
+      if (String(f[ic('Cerrado')] || '').trim().toLowerCase() === 'sí' || String(f[ic('Cerrado')] || '').trim().toLowerCase() === 'si') info.cerrado = true;
       if (f[ic('GuardadoPor')]) info.guardadoPor = f[ic('GuardadoPor')];
       if (f[ic('ModificadoPorTyC')]) info.modificadoPorTyC = f[ic('ModificadoPorTyC')];
       info.porFecha.set(fecha, {
@@ -2975,10 +2975,10 @@ function incConstruirOperaciones(filtradas, cerrando, ic){
         fields[ic('GuardadoPor')] = usuario.correo;
       }
       if (cerrando) {
-        fields[ic('Cerrado')] = true;
+        fields[ic('Cerrado')] = 'Sí';
         fields[ic('CerradoPor')] = usuario.correo;
       } else if (!eraCerrada) {
-        fields[ic('Cerrado')] = false;
+        fields[ic('Cerrado')] = 'No';
       }
 
       operaciones.push({ itemId: d.baseValor.itemId || null, fields });
