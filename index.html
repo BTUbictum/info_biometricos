@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v51]</title>
+<title>Biométricos Colaboradores | Ubictum [v52]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v51</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v52</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -742,6 +742,7 @@
 
   <div id="incContenido">
   <p class="lead">Los días sin checada real muestran un combo (F por default) — así se captura Falta/Asistencia/Permiso/Incapacidad/Vacaciones/Descanso. Al cerrar la semana queda bloqueada para siempre para los colaboradores filtrados.</p>
+  <p id="incQuienSoy" style="font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--gris,#636469); margin-top:-8px; margin-bottom:16px;"></p>
 
   <div class="reg-filtros">
     <div class="reg-campo">
@@ -2545,6 +2546,8 @@ async function inicializarIncidencias(){
       'Ocurrió un error verificando tu acceso (no es que te falte el rol): ' + err.message;
     return;
   }
+  document.getElementById('incQuienSoy').textContent =
+    `Conectado como: ${incUsuarioActual.correo} · Roles: ${[...incUsuarioActual.roles].join(', ') || '(ninguno)'} · Elevado: ${incUsuarioActual.esElevado ? 'sí' : 'no'}`;
   const hoy = new Date();
   const { semana, year } = cdSemanaISO(hoy);
   document.getElementById('incFiltroSemana').value = `${year}-W${semana}`;
