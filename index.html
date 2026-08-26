@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v56]</title>
+<title>Biométricos Colaboradores | Ubictum [v58]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v56</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v58</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -742,7 +742,7 @@
 
   <div id="incContenido">
 
-  <p id="incQuienSoy" style="font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--gris,#636469); margin-top:-8px; margin-bottom:16px;"></p>
+  <p id="incQuienSoy" style="display:none; font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--gris,#636469); margin-top:-8px; margin-bottom:16px;"></p>
 
   <div class="reg-filtros">
     <div class="reg-campo">
@@ -2621,7 +2621,7 @@ async function incBuscar(){
       porColab.get(r.idColab).push(r);
     });
 
-    const camposInc = ['IDColab','Fecha','Codigo','HoraEnt','HoraSal','Cerrado','GuardadoPor','ModificadoPorTyC'].map(n => ic(n)).join(',');
+    const camposInc = ['IDColab','Fecha','Codigo','HoraEnt','HoraSal','Cerrado','GuardadoPor','ModificadoPorTyC','ModificadoPorEnfermeria'].map(n => ic(n)).join(',');
     // Margen de 1 día de cada lado, mismo criterio que ya usamos en RegBio26 —
     // como los registros ahora se guardan a mediodía UTC, este margen sobra
     // de más, pero es la práctica consistente en toda la app contra el
@@ -2631,7 +2631,7 @@ async function incBuscar(){
     const filtroInc = encodeURIComponent(`fields/${ic('Fecha')} ge '${desdeIncAmpliado}' and fields/${ic('Fecha')} le '${hastaIncAmpliado}'`);
     const urlInc = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.regIncidencias}/items?expand=fields(select=${camposInc})&$filter=${filtroInc}&$top=5000`;
     const itemsInc = await graphFetchAll(urlInc, token);
-    // idColab -> { cerrado, guardadoPor, modificadoPorTyC, porFecha: Map(fecha -> {itemId, codigo, horaEnt, horaSal}) }
+    // idColab -> { cerrado, guardadoPor, modificadoPorTyC, modificadoPorEnfermeria, porFecha: Map(fecha -> {itemId, codigo, horaEnt, horaSal}) }
     incCerradosMap = new Map();
     itemsInc.forEach(it => {
       const f = it.fields;
@@ -2642,12 +2642,13 @@ async function incBuscar(){
       const fechaRaw = f[ic('Fecha')];
       const fecha = fechaRaw ? new Date(fechaRaw).toISOString().slice(0, 10) : '';
       if (!incCerradosMap.has(idColab)) {
-        incCerradosMap.set(idColab, { cerrado: false, guardadoPor: '', modificadoPorTyC: '', porFecha: new Map() });
+        incCerradosMap.set(idColab, { cerrado: false, guardadoPor: '', modificadoPorTyC: '', modificadoPorEnfermeria: '', porFecha: new Map() });
       }
       const info = incCerradosMap.get(idColab);
       if (String(f[ic('Cerrado')] || '').trim().toLowerCase() === 'sí' || String(f[ic('Cerrado')] || '').trim().toLowerCase() === 'si') info.cerrado = true;
       if (f[ic('GuardadoPor')]) info.guardadoPor = f[ic('GuardadoPor')];
       if (f[ic('ModificadoPorTyC')]) info.modificadoPorTyC = f[ic('ModificadoPorTyC')];
+      if (f[ic('ModificadoPorEnfermeria')]) info.modificadoPorEnfermeria = f[ic('ModificadoPorEnfermeria')];
       info.porFecha.set(fecha, {
         itemId: it.id,
         codigo: f[ic('Codigo')] || '',
@@ -2752,6 +2753,7 @@ async function incBuscar(){
         jornada: primerConDatos.jornada, cerrado, estatus,
         guardadoPor: infoGuardado ? infoGuardado.guardadoPor : '',
         modificadoPorTyC: infoGuardado ? infoGuardado.modificadoPorTyC : '',
+        modificadoPorEnfermeria: infoGuardado ? infoGuardado.modificadoPorEnfermeria : '',
         dias,
       });
     });
@@ -2976,11 +2978,17 @@ function incConstruirOperaciones(filtradas, cerrando, ic){
         [ic('Semana')]: incSemanaActual.semana,
         [ic('YearSemana')]: incSemanaActual.year,
       };
-      if (eraCerrada) {
-        const rolActuando = usuario.esAdmin ? 'Admin' : (usuario.roles.has('TyC') ? 'TyC' : 'Enfermera');
-        fields[ic('ModificadoPorTyC')] = `${usuario.correo} (${rolActuando})`;
+      const ahoraStr = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'short', timeStyle: 'medium' });
+      if (usuario.roles.has('Enfermera')) {
+        // Enfermería tiene su propio carril: no depende de si ya estaba cerrada o no.
+        fields[ic('ModificadoPorEnfermeria')] = usuario.correo;
+        fields[ic('FechaEnfermeria')] = ahoraStr;
+      } else if (eraCerrada) {
+        fields[ic('ModificadoPorTyC')] = usuario.correo;
+        fields[ic('FechaTyC')] = ahoraStr;
       } else {
         fields[ic('GuardadoPor')] = usuario.correo;
+        fields[ic('FechaGuardado')] = ahoraStr;
       }
       if (cerrando) {
         fields[ic('Cerrado')] = 'Sí';
@@ -3095,6 +3103,7 @@ document.getElementById('incBtnExcel').addEventListener('click', () => {
     obj['Estatus'] = etiquetaEstatus[r.estatus];
     obj['GuardadoPor'] = r.guardadoPor;
     obj['ModificadoPorTyC'] = r.modificadoPorTyC;
+    obj['ModificadoPorEnfermeria'] = r.modificadoPorEnfermeria;
     return obj;
   });
   const hoja = XLSX.utils.json_to_sheet(filas);
