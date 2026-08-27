@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v60]</title>
+<title>Biométricos Colaboradores | Ubictum [v61]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v60</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v61</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2658,7 +2658,6 @@ async function incBuscar(){
     });
 
     const HOY_STR = new Date().toISOString().slice(0, 10);
-    const AYER_STR = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
     const filas = [];
     porColab.forEach(registros => {
@@ -2740,7 +2739,8 @@ async function incBuscar(){
 
         // Regla de Vacaciones: no se puede elegir V para una fecha de hace más
         // de 1 día (hoy o ayer sí, antier en adelante ya no) — aplica a todos.
-        const permiteV = fechaDia >= AYER_STR;
+        // Vacaciones (V): solo hoy en adelante — nunca en el pasado.
+        const permiteV = fechaDia >= HOY_STR;
 
         dias.push({ fecha: fechaDia, baseValor, puedeEditar, permiteV, sesionReal: porDiaSesion[i] });
       }
