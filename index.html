@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v64]</title>
+<title>Biométricos Colaboradores | Ubictum [v65]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v64</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v65</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1561,10 +1561,15 @@ document.getElementById('cdBtnSubir').addEventListener('click', async () => {
     document.getElementById('cdInsertados').textContent = insertados;
     document.getElementById('cdErrores').textContent = errores;
 
-    await escribirLogCarga(token, ids, {
-      nombreArchivo: cdArchivoNombre, fechaMin, fechaMax,
-      leidos, insertados, duplicados, descartados, errores,
-    });
+    try {
+      await escribirLogCarga(token, ids, {
+        nombreArchivo: cdArchivoNombre, fechaMin, fechaMax,
+        leidos, insertados, duplicados, descartados, errores,
+      });
+    } catch (errLog) {
+      console.error('Error al escribir el resumen en Log (no afecta los datos ya insertados):', errLog);
+      cdLog('Aviso: los datos SÍ se insertaron en RegBio26 correctamente, pero no se pudo guardar el resumen en la lista Log: ' + errLog.message + ' (probable falta de permiso de escritura en esa lista).');
+    }
 
     cdLog(`Listo. ${insertados} insertados, ${duplicados} duplicados, ${errores} errores.`);
   } catch (err) {
