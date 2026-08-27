@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v62]</title>
+<title>Biométricos Colaboradores | Ubictum [v64]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v62</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v64</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2839,14 +2839,18 @@ function incRenderTabla(){
         return '<td>—</td>';
       }
 
-      // Editable: combo. Pre-selecciona el código guardado si ya había uno;
-      // si viene de checada real (admin corrigiendo), pre-selecciona "A";
-      // si no hay nada, F por default (D si ese día es descanso registrado).
+      // Editable: combo. Si hay una checada real para este día (aunque ya se
+      // hubiera guardado algo distinto antes, ej. F, porque en ese momento
+      // aún no existía la checada), se preselecciona "A" automáticamente —
+      // así el líder no tiene que revisar registro por registro, solo repasa
+      // la semana completa al final y da Guardar. Si no hay checada real, se
+      // respeta lo ya guardado; si no hay nada de nada, F por default (D si
+      // ese día es descanso registrado).
       let codigoDefault;
-      if (bv.tipo === 'guardado') {
-        codigoDefault = bv.codigo;
-      } else if (bv.tipo === 'real') {
+      if (d.sesionReal) {
         codigoDefault = 'A';
+      } else if (bv.tipo === 'guardado') {
+        codigoDefault = bv.codigo;
       } else {
         const catColabInfo = cdCatColab ? cdCatColab.get(r.idColab) : null;
         const diaLargo = DIA_CORTO_A_LARGO[DIAS_SEMANA[idx]];
@@ -2966,10 +2970,21 @@ function incConstruirOperaciones(filtradas, cerrando, ic){
         const select = document.querySelector(`select.inc-combo[data-idcolab="${r.idColab}"][data-fecha="${d.fecha}"]`);
         if (!select) return;
         codigo = select.value;
-        if (d.baseValor.tipo === 'real' && codigo === 'A') {
-          const s = d.sesionReal;
-          horaEnt = s.entrada.biometrico === 'Door_Panorama Comedor' ? '' : s.entrada.hora.slice(0,5);
-          horaSal = (!s.hayRealSalida || s.salida.biometrico === 'Door_Panorama Comedor') ? '' : s.salida.hora.slice(0,5);
+        if (codigo === 'A') {
+          if (d.sesionReal) {
+            // Siempre toma la hora MÁS RECIENTE de RegBio26 — así, si esto es
+            // un re-guardado después de que llegó una checada nueva (ej. la
+            // salida que faltaba), se actualiza en vez de quedarse con la
+            // hora vieja o mandarla en blanco.
+            const s = d.sesionReal;
+            horaEnt = s.entrada.biometrico === 'Door_Panorama Comedor' ? '' : s.entrada.hora.slice(0,5);
+            horaSal = (!s.hayRealSalida || s.salida.biometrico === 'Door_Panorama Comedor') ? '' : s.salida.hora.slice(0,5);
+          } else if (d.baseValor.tipo === 'guardado') {
+            // "A" manual ya guardado sin checada real de respaldo: conserva
+            // lo que ya había, en vez de borrarlo.
+            horaEnt = d.baseValor.horaEnt || '';
+            horaSal = d.baseValor.horaSal || '';
+          }
         }
       }
 
