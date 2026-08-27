@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v66]</title>
+<title>Biométricos Colaboradores | Ubictum [v67]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v66</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v67</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -642,6 +642,16 @@
 <div class="tabpanel" id="tab-carga">
   <h1>Carga de Data a SharePoint</h1>
 
+  <div id="cdSinAcceso" style="display:none; padding:24px; background:#fff5f5; border:1px solid #f0c9c9; border-radius:10px; color:#8a1f1f;">
+    <p style="font-weight:700; margin-bottom:6px;">Sin acceso a esta pestaña</p>
+    <p style="font-size:13.5px;">Carga de Data está limitada a usuarios con rol TyC o Admin en el catálogo de accesos. Si crees que deberías tener acceso, pide que agreguen tu correo al catálogo.</p>
+    <p id="cdSinAccesoDetalle" style="font-size:12px; margin-top:10px; font-family:'IBM Plex Mono',monospace; color:#a34747;"></p>
+  </div>
+
+  <div id="cdContenido">
+
+  <p id="cdQuienSoy" style="display:none; font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--gris,#636469); margin-top:-8px; margin-bottom:16px;"></p>
+
   <div class="steps">
     <button class="step active" id="cdStep1" type="button"><span class="num">1</span>Subir excel</button>
     <button class="ghost" id="cdResetBtn" type="button">Subir otro archivo</button>
@@ -663,6 +673,37 @@
     <button class="cd-btn" id="cdBtnSubir" type="button">Subir a SharePoint</button>
     <div class="cd-log" id="cdLog" style="margin-top:14px;"></div>
   </div>
+
+  <div class="card" style="margin-top:28px;">
+    <h2 style="font-size:16px; margin-bottom:4px;">Actualizar Facilitador / Líder / Jornada faltantes</h2>
+    <p style="font-size:13px; color:var(--gris,#636469); margin-bottom:14px; max-width:720px;">
+      Busca registros ya subidos a RegBio26 en un rango de fechas cuyo Facilitador, Líder o Jornada quedaron en blanco
+      (por ejemplo, porque el colaborador aún no estaba en CatColab al momento de esa carga), y los actualiza con los
+      datos vigentes en CatColab hoy. No toca ningún otro campo del registro (checadas, horas, etc.).
+    </p>
+    <div class="reg-filtros">
+      <div class="reg-campo">
+        <label>Fecha desde</label>
+        <input type="date" id="cdRepFechaDesde">
+      </div>
+      <div class="reg-campo">
+        <label>Fecha hasta</label>
+        <input type="date" id="cdRepFechaHasta">
+      </div>
+    </div>
+    <button class="cd-btn" id="cdRepBtnBuscar" type="button">Buscar registros con datos faltantes</button>
+
+    <div id="cdRepResumen" class="cd-summary hidden" style="margin-top:14px; grid-template-columns:repeat(4,1fr);">
+      <div class="cd-box"><div class="n" id="cdRepEncontrados">0</div><div class="l">Con datos faltantes</div></div>
+      <div class="cd-box"><div class="n" id="cdRepReparables">0</div><div class="l">Se pueden reparar</div></div>
+      <div class="cd-box"><div class="n" id="cdRepSinMatch">0</div><div class="l">Siguen sin match en CatColab</div></div>
+      <div class="cd-box"><div class="n" id="cdRepActualizados">0</div><div class="l">Actualizados</div></div>
+    </div>
+    <button class="cd-btn hidden" id="cdRepBtnActualizar" type="button" style="margin-top:10px;">Actualizar en SharePoint</button>
+    <div class="cd-log" id="cdRepLog" style="margin-top:14px;"></div>
+  </div>
+
+  </div><!-- /cdContenido -->
 </div><!-- /tab-carga -->
 
 <div class="tabpanel" id="tab-dia">
@@ -1028,6 +1069,7 @@ document.getElementById('tabbar').addEventListener('click', (e) => {
   if (btn.dataset.tab === 'semana' && typeof inicializarSemana === 'function') inicializarSemana();
   if (btn.dataset.tab === 'incidencias' && typeof inicializarIncidencias === 'function') inicializarIncidencias();
   if (btn.dataset.tab === 'biometrico' && typeof inicializarBiometrico === 'function') inicializarBiometrico();
+  if (btn.dataset.tab === 'carga' && typeof inicializarCarga === 'function') inicializarCarga();
 });
 
 /* ============================================================
@@ -1328,6 +1370,7 @@ function leerExcelCarga(wb){
 
 function construirRegistrosParaSubir(porColab, camposMapa){
   const salida = [];
+  const sinMatchCatColab = new Set();
   const c = (displayName) => camposMapa[displayName] || displayName;
   porColab.forEach((registros, idColab) => {
     const ordenados = registros.slice().sort((a,b) => a.dt - b.dt);
@@ -1335,6 +1378,9 @@ function construirRegistrosParaSubir(porColab, camposMapa){
     sesiones.forEach(sesion => {
       const turnoEfectivo = calcularTurnoEfectivo(sesion.entrada, sesion.salida);
       const catColabInfo = cdCatColab.get(idColab) || { facilitador: '', lider: '', jornada: '' };
+      if (!catColabInfo.facilitador && !catColabInfo.lider && !catColabInfo.jornada) {
+        sinMatchCatColab.add(idColab);
+      }
       sesion.registros.forEach(r => {
         const fechaStr = cdParaFechaStr(r.dt);
         const horaStr = cdParaHoraStr(r.dt);
@@ -1361,7 +1407,7 @@ function construirRegistrosParaSubir(porColab, camposMapa){
       });
     });
   });
-  return salida;
+  return { registros: salida, sinMatchCatColab };
 }
 
 /* ============================================================
@@ -1487,9 +1533,40 @@ async function escribirLogCarga(token, ids, resumen){
 
 /* ============================================================
  * ORQUESTACIÓN — pestaña Carga de Data
+ * ------------------------------------------------------------
+ * Acceso restringido: solo usuarios con rol TyC o Admin en
+ * CatAccesos (misma lista/roles que ya usa Registro Incidencias).
  * ============================================================ */
 let cdWorkbook = null;
 let cdArchivoNombre = '';
+let cdInicializado = false;
+
+async function inicializarCarga(){
+  if (cdInicializado) return;
+  cdInicializado = true;
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+    const usuario = await resolverUsuarioActual(token, ids);
+    const permitido = usuario.esAdmin || usuario.roles.has('TyC');
+    if (!permitido) {
+      document.getElementById('cdContenido').style.display = 'none';
+      document.getElementById('cdSinAcceso').style.display = 'block';
+      document.getElementById('cdSinAccesoDetalle').textContent =
+        `Correo detectado: "${usuario.correo || '(vacío)'}" — no se encontró con rol TyC o Admin en el catálogo de accesos.`;
+      return;
+    }
+  } catch (err) {
+    console.error('[Carga de Data] ERROR verificando acceso:', err);
+    document.getElementById('cdContenido').style.display = 'none';
+    document.getElementById('cdSinAcceso').style.display = 'block';
+    document.getElementById('cdSinAccesoDetalle').textContent =
+      'Ocurrió un error verificando tu acceso (no es que te falte el rol): ' + err.message;
+    return;
+  }
+  document.getElementById('cdQuienSoy').textContent =
+    `Conectado como: ${incUsuarioActual.correo} · Roles: ${[...incUsuarioActual.roles].join(', ') || '(ninguno)'}`;
+}
 
 document.getElementById('cdStep1').addEventListener('click', () => document.getElementById('cdFileInput').click());
 document.getElementById('cdFileInput').addEventListener('change', (e) => {
@@ -1534,11 +1611,17 @@ document.getElementById('cdBtnSubir').addEventListener('click', async () => {
     document.getElementById('cdDescartados').textContent = descartados;
 
     cdLog('Calculando Turno Efectivo, Semana, Llave, Facilitador/Líder…');
-    const registros = construirRegistrosParaSubir(porColab, camposMapa);
+    const { registros, sinMatchCatColab } = construirRegistrosParaSubir(porColab, camposMapa);
 
     if (!registros.length) {
       cdLog('No hay registros válidos para subir.');
       return;
+    }
+
+    if (sinMatchCatColab.size) {
+      cdLog(`⚠ Aviso: ${sinMatchCatColab.size} colaborador(es) sin match en CatColab en este momento — se subirán con ` +
+        `Facilitador/Líder/Jornada en blanco: ${[...sinMatchCatColab].join(', ')}. ` +
+        `Una vez que estén en CatColab, usa "Actualizar Facilitador/Líder/Jornada faltantes" más abajo para corregirlos sin volver a cargar el excel.`);
     }
 
     const campoFecha = camposMapa['Fecha'] || 'Fecha';
@@ -1579,6 +1662,205 @@ document.getElementById('cdBtnSubir').addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+
+/* ============================================================
+ * REPARACIÓN — Facilitador/Líder/Jornada faltantes en RegBio26
+ * ------------------------------------------------------------
+ * Busca en un rango de fechas los registros cuyo Facilitador,
+ * Líder o Jornada quedaron en blanco al momento de la Carga de
+ * Data (snapshot vacío porque el colaborador no estaba aún en
+ * CatColab, o el catálogo no había cargado bien esa vez), y los
+ * actualiza con lo que CatColab tenga HOY. Nunca toca otros campos.
+ * ============================================================ */
+function cdRepLog(msg){
+  const el = document.getElementById('cdRepLog');
+  el.textContent += (el.textContent ? '\n' : '') + msg;
+}
+
+let cdRepEncontradosData = []; // registros reparables de la última búsqueda
+
+document.getElementById('cdRepBtnBuscar').addEventListener('click', async () => {
+  const desde = document.getElementById('cdRepFechaDesde').value;
+  const hasta = document.getElementById('cdRepFechaHasta').value;
+  if (!desde || !hasta) { await incAvisar('Selecciona fecha desde y hasta para buscar.'); return; }
+
+  const btn = document.getElementById('cdRepBtnBuscar');
+  btn.disabled = true;
+  document.getElementById('cdRepLog').textContent = '';
+  document.getElementById('cdRepBtnActualizar').classList.add('hidden');
+  document.getElementById('cdRepResumen').classList.add('hidden');
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+
+    // Forzar recarga de CatColab: no confiar en lo cacheado desde una carga
+    // anterior en esta misma pestaña — queremos los datos vigentes de HOY.
+    cdCatColab = null;
+    cdRepLog('Recargando CatColab vigente…');
+    await cargarCatalogos(token, ids);
+
+    const camposMapa = await resolverCamposRegistros(token, ids);
+    const campoFecha = camposMapa['Fecha'] || 'Fecha';
+    const campoFacilitador = camposMapa['Facilitador'] || 'Facilitador';
+    const campoLider = camposMapa['Lider'] || 'Lider';
+    const campoJornada = camposMapa['Jornada'] || 'Jornada';
+    const campoIDColab = camposMapa['IDColab'] || 'IDColab';
+
+    cdRepLog(`Buscando registros entre ${desde} y ${hasta}…`);
+    const desdeISO = desde + 'T00:00:00Z';
+    const hastaISO = hasta + 'T23:59:59Z';
+    const filtro = encodeURIComponent(`fields/${campoFecha} ge '${desdeISO}' and fields/${campoFecha} le '${hastaISO}'`);
+    const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items` +
+      `?expand=fields(select=${campoIDColab},${campoFacilitador},${campoLider},${campoJornada})` +
+      `&$filter=${filtro}&$top=2000`;
+    const items = await graphFetchAll(url, token);
+
+    const faltantes = items.filter(it => {
+      const f = it.fields;
+      return !f[campoFacilitador] || !f[campoLider] || !f[campoJornada];
+    });
+
+    const reparables = [];
+    let sinMatch = 0;
+    faltantes.forEach(it => {
+      const idColab = String(it.fields[campoIDColab] || '').trim();
+      const info = cdCatColab.get(idColab);
+      if (info && (info.facilitador || info.lider || info.jornada)) {
+        reparables.push({ itemId: it.id, idColab, info });
+      } else {
+        sinMatch++;
+      }
+    });
+
+    cdRepEncontradosData = reparables;
+    document.getElementById('cdRepResumen').classList.remove('hidden');
+    document.getElementById('cdRepEncontrados').textContent = faltantes.length;
+    document.getElementById('cdRepReparables').textContent = reparables.length;
+    document.getElementById('cdRepSinMatch').textContent = sinMatch;
+    document.getElementById('cdRepActualizados').textContent = '0';
+
+    cdRepLog(`${faltantes.length} registro(s) con datos en blanco. ${reparables.length} se pueden reparar con CatColab vigente. ` +
+      `${sinMatch} siguen sin match (el colaborador tampoco está en CatColab hoy — hay que darlo de alta ahí primero).`);
+
+    if (reparables.length) document.getElementById('cdRepBtnActualizar').classList.remove('hidden');
+  } catch (err) {
+    console.error(err);
+    cdRepLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('cdRepBtnActualizar').addEventListener('click', async () => {
+  if (!cdRepEncontradosData.length) return;
+  const ok = await incConfirmar(
+    `Se van a actualizar ${cdRepEncontradosData.length} registro(s) en RegBio26 con el Facilitador/Líder/Jornada vigente en CatColab.\n\n` +
+    `Esto NO toca checadas, horas ni ningún otro campo. ¿Confirmas?`
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('cdRepBtnActualizar');
+  btn.disabled = true;
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+    const camposMapa = await resolverCamposRegistros(token, ids);
+    const campos = {
+      campoFacilitador: camposMapa['Facilitador'] || 'Facilitador',
+      campoLider: camposMapa['Lider'] || 'Lider',
+      campoJornada: camposMapa['Jornada'] || 'Jornada',
+    };
+
+    const res = await actualizarMaestroEnLotes(token, ids, cdRepEncontradosData, campos);
+    document.getElementById('cdRepActualizados').textContent = res.actualizados;
+    cdRepLog(`Listo. ${res.actualizados} actualizados, ${res.errores} errores.`);
+    if (!res.errores) {
+      cdRepEncontradosData = [];
+      document.getElementById('cdRepBtnActualizar').classList.add('hidden');
+    }
+  } catch (err) {
+    console.error(err);
+    cdRepLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function enviarLotePatchConReintentos(token, ids, lote, campos, intento = 1){
+  const MAX_INTENTOS = 8;
+  const body = {
+    requests: lote.map((reg, j) => ({
+      id: String(j + 1),
+      method: 'PATCH',
+      url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items/${reg.itemId}/fields`,
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        [campos.campoFacilitador]: reg.info.facilitador || '',
+        [campos.campoLider]: reg.info.lider || '',
+        [campos.campoJornada]: reg.info.jornada || '',
+      },
+    })),
+  };
+
+  let resp;
+  try {
+    resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
+  } catch (e) {
+    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
+      const espera = 1000 * Math.pow(2, intento);
+      cdRepLog(`Límite de ritmo alcanzado, reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
+      await cdEsperar(espera);
+      return enviarLotePatchConReintentos(token, ids, lote, campos, intento + 1);
+    }
+    return { actualizados: 0, errores: lote.length };
+  }
+
+  let actualizados = 0, errores = 0;
+  const pendientesDe429 = [];
+  let primerErrorDelLote = null;
+  resp.responses.forEach(r => {
+    if (r.status >= 200 && r.status < 300) {
+      actualizados++;
+    } else if (r.status === 429) {
+      const idx = parseInt(r.id, 10) - 1;
+      pendientesDe429.push(lote[idx]);
+    } else {
+      errores++;
+      if (!primerErrorDelLote) primerErrorDelLote = r;
+    }
+  });
+  if (primerErrorDelLote) {
+    cdRepLog('Detalle del error (renglón ' + primerErrorDelLote.id + '): ' + JSON.stringify(primerErrorDelLote.body || primerErrorDelLote));
+  }
+
+  if (pendientesDe429.length && intento < MAX_INTENTOS) {
+    const espera = 1000 * Math.pow(2, intento);
+    cdRepLog(`${pendientesDe429.length} renglones chocaron con el límite de ritmo, reintentando en ${espera/1000}s (intento ${intento})…`);
+    await cdEsperar(espera);
+    const reintento = await enviarLotePatchConReintentos(token, ids, pendientesDe429, campos, intento + 1);
+    actualizados += reintento.actualizados;
+    errores += reintento.errores;
+  } else {
+    errores += pendientesDe429.length;
+  }
+
+  return { actualizados, errores };
+}
+
+async function actualizarMaestroEnLotes(token, ids, registros, campos){
+  let actualizados = 0, errores = 0;
+  const TAM_LOTE = 20;
+  const PAUSA_ENTRE_LOTES_MS = 500;
+  for (let i = 0; i < registros.length; i += TAM_LOTE) {
+    const lote = registros.slice(i, i + TAM_LOTE);
+    const res = await enviarLotePatchConReintentos(token, ids, lote, campos);
+    actualizados += res.actualizados;
+    errores += res.errores;
+    cdRepLog(`Progreso: ${Math.min(i + TAM_LOTE, registros.length)}/${registros.length}`);
+    if (i + TAM_LOTE < registros.length) await cdEsperar(PAUSA_ENTRE_LOTES_MS);
+  }
+  return { actualizados, errores };
+}
 
 
 /* ============================================================
