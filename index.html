@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v68]</title>
+<title>Biométricos Colaboradores | Ubictum [v70]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v68</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v70</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -873,7 +873,7 @@
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
             <th id="incThDiaLun">Lun</th><th id="incThDiaMar">Mar</th><th id="incThDiaMie">Mié</th>
             <th id="incThDiaJue">Jue</th><th id="incThDiaVie">Vie</th><th id="incThDiaSab">Sáb</th><th id="incThDiaDom">Dom</th>
-            <th>Jornada</th><th>Estatus</th>
+            <th>Jornada</th><th>Horas Extra</th><th>Estatus</th>
           </tr>
         </thead>
         <tbody id="incTbody"></tbody>
@@ -1200,21 +1200,23 @@ function hhmmAMin(hhmm){
 }
 
 /* ============================================================
- * HORAS EXTRA — elegibilidad (5x2, jornada de 9.5h) y fórmula
+ * HORAS EXTRA — elegibilidad (5x2) y fórmula
  * ------------------------------------------------------------
- * Elegible solo si: (a) tiene exactamente 2 días de descanso
- * (Descansos de CatColab, separado por guiones) y (b) su Jornada
- * programada dura exactamente 9.5 horas (570 min), cruzando
- * medianoche si aplica (nocturno).
+ * Elegible: tiene exactamente 2 días de descanso (Descansos de
+ * CatColab, separado por guiones) — sin importar cuánto dure su
+ * Jornada exactamente (hay 5x2 de 9h30m, 9h35m, etc., todos aplican).
  *
- * Fórmula (confirmada contra los 5 ejemplos de Héctor):
+ * Fórmula (confirmada contra los 5 ejemplos de Héctor, generalizada
+ * a la duración PROPIA de la jornada de cada quien en vez de un fijo
+ * 9.5h): 
  *   minutosTrabajados = salida_real - entrada_real
- *   extraCrudos = minutosTrabajados - 570
+ *   duracionProgramada = fin de su Jornada - inicio de su Jornada (CatColab)
+ *   extraCrudos = minutosTrabajados - duracionProgramada
  *   extraCrudos <= 30  -> 0 horas extra
  *   extraCrudos  > 30  -> ceil((extraCrudos - 30) / 60) horas extra
  * (No se ancla a la hora de salida teórica fija: si el colaborador
  * entró tarde, ese tiempo de más al final NO cuenta como extra,
- * porque no superó las 9.5h realmente trabajadas.)
+ * porque no superó su propia duración de jornada realmente trabajada.)
  * ============================================================ */
 function contarDiasDescanso(descansosStr){
   if (!descansosStr) return 0;
@@ -1233,11 +1235,12 @@ function duracionJornadaMin(jornadaStr){
 
 function esElegibleHorasExtra(catColabInfo){
   if (!catColabInfo) return false;
-  return contarDiasDescanso(catColabInfo.descansos) === 2 && duracionJornadaMin(catColabInfo.jornada) === 570;
+  return contarDiasDescanso(catColabInfo.descansos) === 2;
 }
 
-function calcularHorasExtra(minutosTrabajados){
-  const extraCrudos = minutosTrabajados - 570;
+function calcularHorasExtra(minutosTrabajados, duracionJornadaMinutos){
+  if (duracionJornadaMinutos == null) return null; // sin Jornada válida no se puede calcular
+  const extraCrudos = minutosTrabajados - duracionJornadaMinutos;
   if (extraCrudos <= 30) return 0;
   return Math.ceil((extraCrudos - 30) / 60);
 }
@@ -1454,7 +1457,8 @@ function construirRegistrosParaSubir(porColab, camposMapa){
         sinMatchCatColab.add(idColab);
       }
       // Horas Extra: solo si hay salida real (más de una checada en la
-      // sesión) y el colaborador es elegible (5x2, jornada de 9.5h). Si no
+      // sesión) y el colaborador es elegible (5x2). Se compara contra la
+      // duración de SU PROPIA jornada programada (no un fijo 9.5h). Si no
       // hay salida real todavía, se deja en blanco (null) — no es un 0
       // real, es "aún no se puede saber"; se recalcula solo cuando llegue
       // la checada de salida en una carga futura.
@@ -1462,7 +1466,7 @@ function construirRegistrosParaSubir(porColab, camposMapa){
       let horaExtra = null;
       if (hayRealSalida && esElegibleHorasExtra(catColabInfo)) {
         const minutosTrabajados = (sesion.salida - sesion.entrada) / 60000;
-        horaExtra = calcularHorasExtra(minutosTrabajados);
+        horaExtra = calcularHorasExtra(minutosTrabajados, duracionJornadaMin(catColabInfo.jornada));
       }
       sesion.registros.forEach(r => {
         const fechaStr = cdParaFechaStr(r.dt);
@@ -2037,10 +2041,12 @@ document.getElementById('cdHeBtnBuscar').addEventListener('click', async () => {
         sesionesConSalida++;
 
         if (!esElegibleHorasExtra(catColabInfo)) return; // no aplica, se deja en blanco
+        const duracionProgramada = duracionJornadaMin(catColabInfo.jornada);
+        if (duracionProgramada == null) return; // Jornada mal capturada, no se puede calcular
         elegibles++;
 
         const minutosTrabajados = (sesion.salida - sesion.entrada) / 60000;
-        const horaExtraNueva = calcularHorasExtra(minutosTrabajados);
+        const horaExtraNueva = calcularHorasExtra(minutosTrabajados, duracionProgramada);
         const itemIds = sesion.registros.map(r => r.itemId);
         const yaCorrecto = sesion.registros.every(r => r.horaExtraActual === horaExtraNueva);
         if (yaCorrecto) { sinCambios++; return; }
@@ -2685,6 +2691,7 @@ async function semBuscar(){
             : `<span class="sem-hora-doble"><span>${horaOGuion(entrada)}</span><span>—</span></span>`,
           entrada,
           horaExtra: hayRealSalida ? (salida.horaExtra ?? entrada.horaExtra ?? null) : null,
+          retardo: esRetardo(entrada.hora, entrada.jornada),
         };
       });
 
@@ -2726,7 +2733,7 @@ async function semBuscar(){
         nombre: primerConDatos.nombre,
         turno: turnoRep,
         area: areaRep,
-        dias: porDia.map(d => d ? d.texto : '—'),
+        dias: porDia.map(d => d ? { texto: d.texto, retardo: d.retardo } : { texto: '—', retardo: false }),
         biometricoValores: porDia.filter(Boolean).map(d => d.entrada.biometrico),
         facilitador: primerConDatos.facilitador,
         lider: primerConDatos.lider,
@@ -2787,7 +2794,7 @@ function semRenderTabla(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno || ''}</td><td>${r.area || ''}</td>
-      ${r.dias.map(d => `<td>${d}</td>`).join('')}
+      ${r.dias.map(d => `<td${d.retardo ? ' style="background:#fff3b0;"' : ''}>${d.texto}</td>`).join('')}
       <td>${r.jornada || ''}</td>
       <td>${r.elegibleHorasExtra ? r.horaExtraSemana : '—'}</td>
     `;
@@ -3099,14 +3106,19 @@ const ROL_CODIGOS_PERMITIDOS = {
 };
 
 // Retardo (R): se detecta cuando la entrada real pasa más de 10 minutos del
-// inicio de Jornada. Compara solo el reloj (HH:MM) contra el inicio de
-// Jornada — así funciona igual para nocturno/diurno sin cruzar fecha.
+// inicio de Jornada. Compara el reloj (HH:MM) contra el inicio de Jornada;
+// si la diferencia cruda sale MUY negativa (más de 12h), es un nocturno cuya
+// entrada real cayó ya del otro lado de medianoche (ej. jornada 21:00-7:30 y
+// entrada real 00:59 = casi 4h tarde, no "-20h"), así que se ajusta sumando
+// 24h antes de comparar contra el margen de 10 minutos.
 function esRetardo(horaEntradaStr, jornadaStr){
   if (!horaEntradaStr || !jornadaStr || !jornadaStr.includes('-')) return false;
   const inicioMin = hhmmAMin(jornadaStr.split('-')[0].trim());
   const [h, m] = String(horaEntradaStr).split(':').map(Number);
   if (inicioMin == null || isNaN(h) || isNaN(m)) return false;
-  return (h * 60 + m) - inicioMin > 10;
+  let diff = (h * 60 + m) - inicioMin;
+  if (diff < -720) diff += 24 * 60; // cruce de medianoche: entrada "temprano del día siguiente" en reloj
+  return diff > 10;
 }
 
 function incCodigosPermitidos(usuario){
@@ -3223,7 +3235,7 @@ async function incBuscar(){
     const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
     const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
 
-    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada']
+    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada','HoraExtra']
       .map(n => c(n)).join(',');
     const filtroReg = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
     const urlReg = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtroReg}&$top=5000`;
@@ -3232,12 +3244,14 @@ async function incBuscar(){
       const f = it.fields;
       const fecha = (f[c('Fecha')] || '').slice(0, 10);
       const hora = f[c('Hora')] || '00:00:00';
+      const he = f[c('HoraExtra')];
       return {
         idColab: f[c('IDColab')] || '', nombre: f[c('Nombre')] || '',
         turno: f[c('TurnoAsignado')] || '', area: f[c('Area')] || '',
         biometrico: f[c('Biometrico')] || '', fecha, hora,
         facilitador: f[c('Facilitador')] || '', lider: f[c('Lider')] || '',
         jornada: f[c('Jornada')] || '', dt: new Date(fecha + 'T' + hora + 'Z'),
+        horaExtra: (he === 0 || he) ? he : null,
       };
     });
     incValoresParaDropdown = crudos;
@@ -3301,7 +3315,7 @@ async function incBuscar(){
         const offsetMs = new Date(fechaReportada + 'T00:00:00Z') - lunes;
         const idxDia = Math.round(offsetMs / 86400000);
         if (idxDia < 0 || idxDia > 6) return;
-        porDiaSesion[idxDia] = { entrada, salida, hayRealSalida };
+        porDiaSesion[idxDia] = { entrada, salida, hayRealSalida, horaExtra: hayRealSalida ? (salida.horaExtra ?? entrada.horaExtra ?? null) : null };
       });
 
       if (porDiaSesion.every(d => d === null)) return;
@@ -3367,12 +3381,21 @@ async function incBuscar(){
         dias.push({ fecha: fechaDia, baseValor, puedeEditar, sesionReal: porDiaSesion[i], esPasada: fechaDia < HOY_STR });
       }
 
+      // Horas Extra semanal: misma regla que en Registros por Semana —
+      // elegible (5x2, jornada 9.5h) según CatColab vigente; "—" si no.
+      const catColabInfoInc = cdCatColab ? cdCatColab.get(idColab) : null;
+      const elegibleHorasExtraInc = esElegibleHorasExtra(catColabInfoInc);
+      const horaExtraSemanaInc = elegibleHorasExtraInc
+        ? porDiaSesion.reduce((acc, d) => acc + (d && typeof d.horaExtra === 'number' ? d.horaExtra : 0), 0)
+        : null;
+
       filas.push({
         idColab, nombre: primerConDatos.nombre,
         turno: moda(conteoTurno), area: moda(conteoArea),
         biometricoValores: porDiaSesion.filter(Boolean).map(d => d.entrada.biometrico),
         facilitador: primerConDatos.facilitador, lider: primerConDatos.lider,
         jornada: primerConDatos.jornada, cerrado, estatus,
+        elegibleHorasExtra: elegibleHorasExtraInc, horaExtraSemana: horaExtraSemanaInc,
         guardadoPor: infoGuardado ? infoGuardado.guardadoPor : '',
         modificadoPorTyC: infoGuardado ? infoGuardado.modificadoPorTyC : '',
         modificadoPorEnfermeria: infoGuardado ? infoGuardado.modificadoPorEnfermeria : '',
@@ -3523,6 +3546,7 @@ function incRenderTabla(){
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno || ''}</td><td>${r.area || ''}</td>
       ${celdasDias}
       <td>${r.jornada || ''}</td>
+      <td>${r.elegibleHorasExtra ? r.horaExtraSemana : '—'}</td>
       <td class="${claseEstatus}">${etiquetaEstatus}</td>
     `;
     tbody.appendChild(tr);
