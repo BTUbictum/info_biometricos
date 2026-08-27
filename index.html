@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v65]</title>
+<title>Biométricos Colaboradores | Ubictum [v66]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v65</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v66</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2742,7 +2742,7 @@ async function incBuscar(){
           puedeEditar = usuario.esElevado || usuario.esOperaciones;
         }
 
-        dias.push({ fecha: fechaDia, baseValor, puedeEditar, sesionReal: porDiaSesion[i] });
+        dias.push({ fecha: fechaDia, baseValor, puedeEditar, sesionReal: porDiaSesion[i], esPasada: fechaDia < HOY_STR });
       }
 
       filas.push({
@@ -2869,6 +2869,11 @@ function incRenderTabla(){
       // elegir libremente — así nadie sobreescribe por accidente un día que no
       // tocó, solo por no tener ese código entre sus opciones permitidas.
       const codigosDisponibles = new Set(codigosPermitidos);
+      // Vacaciones (V) solo se puede asignar hoy o a futuro; para días ya
+      // pasados queda bloqueada salvo para Admin. El valor ya guardado
+      // (aunque sea V en un día pasado) se preserva abajo vía codigoDefault,
+      // para no desaparecer/sobreescribir por accidente algo ya asentado.
+      if (d.esPasada && !usuario.esAdmin) codigosDisponibles.delete('V');
       codigosDisponibles.add(codigoDefault);
 
       const opciones = (incCatalogoOpciones || []).filter(o => {
