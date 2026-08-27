@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v67]</title>
+<title>Biométricos Colaboradores | Ubictum [v68]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v67</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v68</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -701,6 +701,35 @@
     </div>
     <button class="cd-btn hidden" id="cdRepBtnActualizar" type="button" style="margin-top:10px;">Actualizar en SharePoint</button>
     <div class="cd-log" id="cdRepLog" style="margin-top:14px;"></div>
+  </div>
+
+  <div class="card" style="margin-top:28px;">
+    <h2 style="font-size:16px; margin-bottom:4px;">Calcular Horas Extra en registros existentes</h2>
+    <p style="font-size:13px; color:var(--gris,#636469); margin-bottom:14px; max-width:720px;">
+      Recorre RegBio26 en un rango de fechas, agrupa entrada/salida por sesión y calcula Horas Extra para los
+      colaboradores elegibles (5x2, jornada de 9.5h) usando CatColab vigente. Solo toca sesiones con salida real;
+      un turno todavía sin salida se deja como está y se recalculará solo cuando llegue esa checada.
+    </p>
+    <div class="reg-filtros">
+      <div class="reg-campo">
+        <label>Fecha desde</label>
+        <input type="date" id="cdHeFechaDesde">
+      </div>
+      <div class="reg-campo">
+        <label>Fecha hasta</label>
+        <input type="date" id="cdHeFechaHasta">
+      </div>
+    </div>
+    <button class="cd-btn" id="cdHeBtnBuscar" type="button">Buscar sesiones a calcular</button>
+
+    <div id="cdHeResumen" class="cd-summary hidden" style="margin-top:14px; grid-template-columns:repeat(4,1fr);">
+      <div class="cd-box"><div class="n" id="cdHeRevisadas">0</div><div class="l">Sesiones con salida real</div></div>
+      <div class="cd-box"><div class="n" id="cdHeElegibles">0</div><div class="l">Elegibles (5x2, 9.5h)</div></div>
+      <div class="cd-box"><div class="n" id="cdHeAActualizar">0</div><div class="l">A actualizar</div></div>
+      <div class="cd-box"><div class="n" id="cdHeActualizados">0</div><div class="l">Actualizados</div></div>
+    </div>
+    <button class="cd-btn hidden" id="cdHeBtnActualizar" type="button" style="margin-top:10px;">Actualizar en SharePoint</button>
+    <div class="cd-log" id="cdHeLog" style="margin-top:14px;"></div>
   </div>
 
   </div><!-- /cdContenido -->
@@ -913,7 +942,7 @@
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
             <th id="thDiaLun">Lun</th><th id="thDiaMar">Mar</th><th id="thDiaMie">Mié</th>
             <th id="thDiaJue">Jue</th><th id="thDiaVie">Vie</th><th id="thDiaSab">Sáb</th><th id="thDiaDom">Dom</th>
-            <th>Jornada</th>
+            <th>Jornada</th><th>Horas Extra</th>
           </tr>
         </thead>
         <tbody id="semTbody"></tbody>
@@ -1170,6 +1199,49 @@ function hhmmAMin(hhmm){
   return h * 60 + m;
 }
 
+/* ============================================================
+ * HORAS EXTRA — elegibilidad (5x2, jornada de 9.5h) y fórmula
+ * ------------------------------------------------------------
+ * Elegible solo si: (a) tiene exactamente 2 días de descanso
+ * (Descansos de CatColab, separado por guiones) y (b) su Jornada
+ * programada dura exactamente 9.5 horas (570 min), cruzando
+ * medianoche si aplica (nocturno).
+ *
+ * Fórmula (confirmada contra los 5 ejemplos de Héctor):
+ *   minutosTrabajados = salida_real - entrada_real
+ *   extraCrudos = minutosTrabajados - 570
+ *   extraCrudos <= 30  -> 0 horas extra
+ *   extraCrudos  > 30  -> ceil((extraCrudos - 30) / 60) horas extra
+ * (No se ancla a la hora de salida teórica fija: si el colaborador
+ * entró tarde, ese tiempo de más al final NO cuenta como extra,
+ * porque no superó las 9.5h realmente trabajadas.)
+ * ============================================================ */
+function contarDiasDescanso(descansosStr){
+  if (!descansosStr) return 0;
+  return String(descansosStr).split('-').map(s => s.trim()).filter(Boolean).length;
+}
+
+function duracionJornadaMin(jornadaStr){
+  if (!jornadaStr || !String(jornadaStr).includes('-')) return null;
+  const [ini, fin] = String(jornadaStr).split('-').map(s => s.trim());
+  const iniMin = hhmmAMin(ini), finMin = hhmmAMin(fin);
+  if (iniMin == null || finMin == null) return null;
+  let dur = finMin - iniMin;
+  if (dur <= 0) dur += 24 * 60; // cruza medianoche (nocturno)
+  return dur;
+}
+
+function esElegibleHorasExtra(catColabInfo){
+  if (!catColabInfo) return false;
+  return contarDiasDescanso(catColabInfo.descansos) === 2 && duracionJornadaMin(catColabInfo.jornada) === 570;
+}
+
+function calcularHorasExtra(minutosTrabajados){
+  const extraCrudos = minutosTrabajados - 570;
+  if (extraCrudos <= 30) return 0;
+  return Math.ceil((extraCrudos - 30) / 60);
+}
+
 async function cargarCatalogos(token, ids){
   if (cdCatTurnos && cdCatColab) return;
 
@@ -1377,9 +1449,20 @@ function construirRegistrosParaSubir(porColab, camposMapa){
     const sesiones = agruparEnSesiones(ordenados);
     sesiones.forEach(sesion => {
       const turnoEfectivo = calcularTurnoEfectivo(sesion.entrada, sesion.salida);
-      const catColabInfo = cdCatColab.get(idColab) || { facilitador: '', lider: '', jornada: '' };
+      const catColabInfo = cdCatColab.get(idColab) || { facilitador: '', lider: '', jornada: '', descansos: '' };
       if (!catColabInfo.facilitador && !catColabInfo.lider && !catColabInfo.jornada) {
         sinMatchCatColab.add(idColab);
+      }
+      // Horas Extra: solo si hay salida real (más de una checada en la
+      // sesión) y el colaborador es elegible (5x2, jornada de 9.5h). Si no
+      // hay salida real todavía, se deja en blanco (null) — no es un 0
+      // real, es "aún no se puede saber"; se recalcula solo cuando llegue
+      // la checada de salida en una carga futura.
+      const hayRealSalida = sesion.registros.length > 1;
+      let horaExtra = null;
+      if (hayRealSalida && esElegibleHorasExtra(catColabInfo)) {
+        const minutosTrabajados = (sesion.salida - sesion.entrada) / 60000;
+        horaExtra = calcularHorasExtra(minutosTrabajados);
       }
       sesion.registros.forEach(r => {
         const fechaStr = cdParaFechaStr(r.dt);
@@ -1403,6 +1486,7 @@ function construirRegistrosParaSubir(porColab, camposMapa){
           [c('Facilitador')]: catColabInfo.facilitador,
           [c('Lider')]: catColabInfo.lider,
           [c('Jornada')]: catColabInfo.jornada,
+          [c('HoraExtra')]: horaExtra,
         });
       });
     });
@@ -1864,6 +1948,235 @@ async function actualizarMaestroEnLotes(token, ids, registros, campos){
 
 
 /* ============================================================
+ * BARRIDO — Horas Extra en sesiones ya existentes en RegBio26
+ * ------------------------------------------------------------
+ * Reconstruye sesiones (entrada/salida) a partir de las checadas
+ * ya guardadas, recalcula HoraExtra con CatColab vigente, y
+ * actualiza TODAS las filas de esa sesión (entrada y salida)
+ * cuando el valor guardado no coincide con el recién calculado.
+ * ============================================================ */
+function cdHeLog(msg){
+  const el = document.getElementById('cdHeLog');
+  el.textContent += (el.textContent ? '\n' : '') + msg;
+}
+
+let cdHePendientes = []; // [{ itemIds:[...], horaExtraNueva }]
+
+document.getElementById('cdHeBtnBuscar').addEventListener('click', async () => {
+  const desde = document.getElementById('cdHeFechaDesde').value;
+  const hasta = document.getElementById('cdHeFechaHasta').value;
+  if (!desde || !hasta) { await incAvisar('Selecciona fecha desde y hasta para buscar.'); return; }
+
+  const btn = document.getElementById('cdHeBtnBuscar');
+  btn.disabled = true;
+  document.getElementById('cdHeLog').textContent = '';
+  document.getElementById('cdHeBtnActualizar').classList.add('hidden');
+  document.getElementById('cdHeResumen').classList.add('hidden');
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+
+    cdCatColab = null;
+    cdHeLog('Recargando CatColab vigente (Descansos + Jornada)…');
+    await cargarCatalogos(token, ids);
+
+    const camposMapa = await resolverCamposRegistros(token, ids);
+    const campoFecha = camposMapa['Fecha'] || 'Fecha';
+    const campoHora = camposMapa['Hora'] || 'Hora';
+    const campoIDColab = camposMapa['IDColab'] || 'IDColab';
+    const campoHoraExtra = camposMapa['HoraExtra'] || 'HoraExtra';
+
+    cdHeLog(`Buscando checadas entre ${desde} y ${hasta}…`);
+    // Margen de 1 día de cada lado para no cortar sesiones nocturnas en el borde del rango.
+    const unDiaMs = 24 * 60 * 60 * 1000;
+    const desdeISO = new Date(desde + 'T00:00:00Z');
+    desdeISO.setTime(desdeISO.getTime() - unDiaMs);
+    const hastaISO = new Date(hasta + 'T23:59:59Z');
+    hastaISO.setTime(hastaISO.getTime() + unDiaMs);
+    const filtro = encodeURIComponent(`fields/${campoFecha} ge '${desdeISO.toISOString()}' and fields/${campoFecha} le '${hastaISO.toISOString()}'`);
+    const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items` +
+      `?expand=fields(select=${campoIDColab},${campoFecha},${campoHora},${campoHoraExtra})` +
+      `&$filter=${filtro}&$top=5000`;
+    const items = await graphFetchAll(url, token);
+
+    const crudos = items.map(it => {
+      const f = it.fields;
+      const fecha = (f[campoFecha] || '').slice(0, 10);
+      const hora = f[campoHora] || '00:00:00';
+      const he = f[campoHoraExtra];
+      return {
+        itemId: it.id,
+        idColab: String(f[campoIDColab] || '').trim(),
+        dt: new Date(fecha + 'T' + hora + 'Z'),
+        horaExtraActual: (he === 0 || he) ? he : null,
+      };
+    });
+
+    const porColab = new Map();
+    crudos.forEach(r => {
+      if (!porColab.has(r.idColab)) porColab.set(r.idColab, []);
+      porColab.get(r.idColab).push(r);
+    });
+
+    let sesionesConSalida = 0, elegibles = 0, sinCambios = 0;
+    const pendientes = [];
+
+    porColab.forEach((registros, idColab) => {
+      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const sesiones = agruparEnSesiones(ordenados);
+      const catColabInfo = cdCatColab.get(idColab);
+      sesiones.forEach(sesion => {
+        // Solo sesiones cuya salida cae dentro del rango pedido (evita
+        // recontar/duplicar sesiones que ya se revisaron en un barrido
+        // anterior por el margen de 1 día).
+        const fechaSalida = sesion.salida.toISOString().slice(0, 10);
+        if (fechaSalida < desde || fechaSalida > hasta) return;
+
+        const hayRealSalida = sesion.registros.length > 1;
+        if (!hayRealSalida) return; // sin salida real, no se puede calcular
+        sesionesConSalida++;
+
+        if (!esElegibleHorasExtra(catColabInfo)) return; // no aplica, se deja en blanco
+        elegibles++;
+
+        const minutosTrabajados = (sesion.salida - sesion.entrada) / 60000;
+        const horaExtraNueva = calcularHorasExtra(minutosTrabajados);
+        const itemIds = sesion.registros.map(r => r.itemId);
+        const yaCorrecto = sesion.registros.every(r => r.horaExtraActual === horaExtraNueva);
+        if (yaCorrecto) { sinCambios++; return; }
+        pendientes.push({ itemIds, horaExtraNueva });
+      });
+    });
+
+    cdHePendientes = pendientes;
+    document.getElementById('cdHeResumen').classList.remove('hidden');
+    document.getElementById('cdHeRevisadas').textContent = sesionesConSalida;
+    document.getElementById('cdHeElegibles').textContent = elegibles;
+    document.getElementById('cdHeAActualizar').textContent = pendientes.length;
+    document.getElementById('cdHeActualizados').textContent = '0';
+
+    cdHeLog(`${sesionesConSalida} sesión(es) con salida real revisadas. ${elegibles} elegibles (5x2, jornada de 9.5h). ` +
+      `${pendientes.length} con Horas Extra distinta a la calculada (a actualizar). ${sinCambios} ya estaban correctas.`);
+
+    if (pendientes.length) document.getElementById('cdHeBtnActualizar').classList.remove('hidden');
+  } catch (err) {
+    console.error(err);
+    cdHeLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('cdHeBtnActualizar').addEventListener('click', async () => {
+  if (!cdHePendientes.length) return;
+  const totalFilas = cdHePendientes.reduce((acc, p) => acc + p.itemIds.length, 0);
+  const ok = await incConfirmar(
+    `Se va a actualizar el campo Horas Extra en ${totalFilas} registro(s) de RegBio26 ` +
+    `(${cdHePendientes.length} sesión(es)), con el valor recién calculado.\n\n` +
+    `Esto NO toca checadas, horas ni ningún otro campo. ¿Confirmas?`
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('cdHeBtnActualizar');
+  btn.disabled = true;
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+    const camposMapa = await resolverCamposRegistros(token, ids);
+    const campoHoraExtra = camposMapa['HoraExtra'] || 'HoraExtra';
+
+    const operaciones = [];
+    cdHePendientes.forEach(p => p.itemIds.forEach(itemId => operaciones.push({ itemId, valor: p.horaExtraNueva })));
+
+    const res = await actualizarHorasExtraEnLotes(token, ids, operaciones, campoHoraExtra);
+    document.getElementById('cdHeActualizados').textContent = res.actualizados;
+    cdHeLog(`Listo. ${res.actualizados} registro(s) actualizados, ${res.errores} errores.`);
+    if (!res.errores) {
+      cdHePendientes = [];
+      document.getElementById('cdHeBtnActualizar').classList.add('hidden');
+    }
+  } catch (err) {
+    console.error(err);
+    cdHeLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function enviarLotePatchHorasExtraConReintentos(token, ids, lote, campoHoraExtra, intento = 1){
+  const MAX_INTENTOS = 8;
+  const body = {
+    requests: lote.map((op, j) => ({
+      id: String(j + 1),
+      method: 'PATCH',
+      url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items/${op.itemId}/fields`,
+      headers: { 'Content-Type': 'application/json' },
+      body: { [campoHoraExtra]: op.valor },
+    })),
+  };
+
+  let resp;
+  try {
+    resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
+  } catch (e) {
+    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
+      const espera = 1000 * Math.pow(2, intento);
+      cdHeLog(`Límite de ritmo alcanzado, reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
+      await cdEsperar(espera);
+      return enviarLotePatchHorasExtraConReintentos(token, ids, lote, campoHoraExtra, intento + 1);
+    }
+    return { actualizados: 0, errores: lote.length };
+  }
+
+  let actualizados = 0, errores = 0;
+  const pendientesDe429 = [];
+  let primerErrorDelLote = null;
+  resp.responses.forEach(r => {
+    if (r.status >= 200 && r.status < 300) {
+      actualizados++;
+    } else if (r.status === 429) {
+      const idx = parseInt(r.id, 10) - 1;
+      pendientesDe429.push(lote[idx]);
+    } else {
+      errores++;
+      if (!primerErrorDelLote) primerErrorDelLote = r;
+    }
+  });
+  if (primerErrorDelLote) {
+    cdHeLog('Detalle del error (renglón ' + primerErrorDelLote.id + '): ' + JSON.stringify(primerErrorDelLote.body || primerErrorDelLote));
+  }
+
+  if (pendientesDe429.length && intento < MAX_INTENTOS) {
+    const espera = 1000 * Math.pow(2, intento);
+    cdHeLog(`${pendientesDe429.length} renglones chocaron con el límite de ritmo, reintentando en ${espera/1000}s (intento ${intento})…`);
+    await cdEsperar(espera);
+    const reintento = await enviarLotePatchHorasExtraConReintentos(token, ids, pendientesDe429, campoHoraExtra, intento + 1);
+    actualizados += reintento.actualizados;
+    errores += reintento.errores;
+  } else {
+    errores += pendientesDe429.length;
+  }
+
+  return { actualizados, errores };
+}
+
+async function actualizarHorasExtraEnLotes(token, ids, operaciones, campoHoraExtra){
+  let actualizados = 0, errores = 0;
+  const TAM_LOTE = 20;
+  const PAUSA_ENTRE_LOTES_MS = 500;
+  for (let i = 0; i < operaciones.length; i += TAM_LOTE) {
+    const lote = operaciones.slice(i, i + TAM_LOTE);
+    const res = await enviarLotePatchHorasExtraConReintentos(token, ids, lote, campoHoraExtra);
+    actualizados += res.actualizados;
+    errores += res.errores;
+    cdHeLog(`Progreso: ${Math.min(i + TAM_LOTE, operaciones.length)}/${operaciones.length}`);
+    if (i + TAM_LOTE < operaciones.length) await cdEsperar(PAUSA_ENTRE_LOTES_MS);
+  }
+  return { actualizados, errores };
+}
+
+
+/* ============================================================
  * PESTAÑA REGISTROS — consulta directa sobre RegBio26
  * ------------------------------------------------------------
  * Solo Fecha (y Llave) están indexadas en la lista, así que la
@@ -2313,10 +2626,12 @@ async function semBuscar(){
     const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
     const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
 
-    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada']
+    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada','HoraExtra']
       .map(n => c(n)).join(',');
     const filtro = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
     const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtro}&$top=5000`;
+
+    await cargarCatalogos(token, regIds); // asegura cdCatColab (Descansos + Jornada) para elegibilidad de Horas Extra
 
     const items = await graphFetchAll(url, token);
     const crudos = items.map(it => {
@@ -2333,6 +2648,7 @@ async function semBuscar(){
         facilitador: f[c('Facilitador')] || '',
         lider: f[c('Lider')] || '',
         jornada: f[c('Jornada')] || '',
+        horaExtra: (f[c('HoraExtra')] === 0 || f[c('HoraExtra')]) ? f[c('HoraExtra')] : null,
         dt: new Date(fecha + 'T' + hora + 'Z'),
       };
     });
@@ -2368,6 +2684,7 @@ async function semBuscar(){
             ? `<span class="sem-hora-doble"><span>${horaOGuion(entrada)}</span><span>${horaOGuion(salida)}</span></span>`
             : `<span class="sem-hora-doble"><span>${horaOGuion(entrada)}</span><span>—</span></span>`,
           entrada,
+          horaExtra: hayRealSalida ? (salida.horaExtra ?? entrada.horaExtra ?? null) : null,
         };
       });
 
@@ -2394,6 +2711,16 @@ async function semBuscar(){
       const turnoRep = moda(conteoTurno, porDia, 'turno');
       const areaRep = moda(conteoArea, porDia, 'area');
 
+      // Horas Extra semanal: solo suma/aplica si el colaborador es elegible
+      // (5x2 + jornada de 9.5h) según CatColab VIGENTE (no un snapshot). Si
+      // no es elegible se muestra "—" en vez de 0, para no sugerir que ese
+      // cero podría llegar a crecer.
+      const catColabInfoSem = cdCatColab ? cdCatColab.get(primerConDatos.idColab) : null;
+      const elegibleHorasExtra = esElegibleHorasExtra(catColabInfoSem);
+      const horaExtraSemana = elegibleHorasExtra
+        ? porDia.reduce((acc, d) => acc + (d && typeof d.horaExtra === 'number' ? d.horaExtra : 0), 0)
+        : null;
+
       filas.push({
         idColab: primerConDatos.idColab,
         nombre: primerConDatos.nombre,
@@ -2404,6 +2731,7 @@ async function semBuscar(){
         facilitador: primerConDatos.facilitador,
         lider: primerConDatos.lider,
         jornada: primerConDatos.jornada,
+        elegibleHorasExtra, horaExtraSemana,
       });
     });
 
@@ -2461,6 +2789,7 @@ function semRenderTabla(){
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno || ''}</td><td>${r.area || ''}</td>
       ${r.dias.map(d => `<td>${d}</td>`).join('')}
       <td>${r.jornada || ''}</td>
+      <td>${r.elegibleHorasExtra ? r.horaExtraSemana : '—'}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -2764,10 +3093,21 @@ async function cargarCatAccesos(token, ids){
 const ROL_CODIGOS_PERMITIDOS = {
   Facilitador: ['F', 'PSG', 'V', 'D'],
   Lider: ['F', 'PSG', 'V', 'D'],
-  TyC: ['P', 'A'],
+  TyC: ['P', 'A', 'R'],
   Enfermera: ['I', 'II'],
-  Admin: ['F', 'A', 'PSG', 'P', 'I', 'II', 'V', 'D'],
+  Admin: ['F', 'A', 'PSG', 'P', 'I', 'II', 'V', 'D', 'R'],
 };
+
+// Retardo (R): se detecta cuando la entrada real pasa más de 10 minutos del
+// inicio de Jornada. Compara solo el reloj (HH:MM) contra el inicio de
+// Jornada — así funciona igual para nocturno/diurno sin cruzar fecha.
+function esRetardo(horaEntradaStr, jornadaStr){
+  if (!horaEntradaStr || !jornadaStr || !jornadaStr.includes('-')) return false;
+  const inicioMin = hhmmAMin(jornadaStr.split('-')[0].trim());
+  const [h, m] = String(horaEntradaStr).split(':').map(Number);
+  if (inicioMin == null || isNaN(h) || isNaN(m)) return false;
+  return (h * 60 + m) - inicioMin > 10;
+}
 
 function incCodigosPermitidos(usuario){
   if (usuario.esAdmin) return new Set(ROL_CODIGOS_PERMITIDOS.Admin);
@@ -3098,6 +3438,13 @@ function incRenderTabla(){
     const celdasDias = r.dias.map((d, idx) => {
       const bv = d.baseValor;
 
+      // Retardo: se calcula SIEMPRE a partir de la checada real cruda contra
+      // el inicio de Jornada, sin importar qué código quede seleccionado en
+      // el combo. El amarillo queda pegado al registro aunque el líder
+      // cambie R por PSG u otra cosa después.
+      const esRetardoHoy = !!(d.sesionReal && esRetardo(d.sesionReal.entrada.hora, d.sesionReal.entrada.jornada));
+      const estiloRetardo = esRetardoHoy ? ' style="background:#fff3b0;"' : '';
+
       // Texto/hora de referencia para mostrar cuando hay checada real de fondo
       // (se muestra siempre que exista, editable o no, como contexto).
       let referenciaReal = '';
@@ -3112,16 +3459,16 @@ function incRenderTabla(){
         // Solo lectura: muestra lo que haya (guardado o real), sin combo.
         if (bv.tipo === 'guardado') {
           if (bv.codigo === 'A' && (bv.horaEnt || bv.horaSal)) {
-            return `<td><span class="sem-hora-doble"><span>${bv.horaEnt ? bv.horaEnt.slice(0,5) : '—'}</span><span>${bv.horaSal ? bv.horaSal.slice(0,5) : '—'}</span></span></td>`;
+            return `<td${estiloRetardo}><span class="sem-hora-doble"><span>${bv.horaEnt ? bv.horaEnt.slice(0,5) : '—'}</span><span>${bv.horaSal ? bv.horaSal.slice(0,5) : '—'}</span></span></td>`;
           }
-          return `<td><span class="inc-codigo-bloqueado">${bv.codigo}</span></td>`;
+          return `<td${estiloRetardo}><span class="inc-codigo-bloqueado">${bv.codigo}</span></td>`;
         }
         if (bv.tipo === 'real') {
           const s = d.sesionReal;
           const texto = s.hayRealSalida
             ? `<span class="sem-hora-doble"><span>${horaOGuion(s.entrada)}</span><span>${horaOGuion(s.salida)}</span></span>`
             : `<span class="sem-hora-doble"><span>${horaOGuion(s.entrada)}</span><span>—</span></span>`;
-          return `<td>${texto}</td>`;
+          return `<td${estiloRetardo}>${texto}</td>`;
         }
         return '<td>—</td>';
       }
@@ -3130,12 +3477,13 @@ function incRenderTabla(){
       // hubiera guardado algo distinto antes, ej. F, porque en ese momento
       // aún no existía la checada), se preselecciona "A" automáticamente —
       // así el líder no tiene que revisar registro por registro, solo repasa
-      // la semana completa al final y da Guardar. Si no hay checada real, se
-      // respeta lo ya guardado; si no hay nada de nada, F por default (D si
-      // ese día es descanso registrado).
+      // la semana completa al final y da Guardar. Si detecta retardo (más de
+      // 10 min después del inicio de Jornada), preselecciona "R" en vez de
+      // "A". Si no hay checada real, se respeta lo ya guardado; si no hay
+      // nada de nada, F por default (D si ese día es descanso registrado).
       let codigoDefault;
       if (d.sesionReal) {
-        codigoDefault = 'A';
+        codigoDefault = esRetardoHoy ? 'R' : 'A';
       } else if (bv.tipo === 'guardado') {
         codigoDefault = bv.codigo;
       } else {
@@ -3165,7 +3513,7 @@ function incRenderTabla(){
         `<option value="${o.code}" ${o.code === codigoDefault ? 'selected' : ''}>${o.code}</option>`
       ).join('');
 
-      return `<td>${referenciaReal}<select class="inc-combo" data-idcolab="${r.idColab}" data-fecha="${d.fecha}" data-esreal="${bv.tipo === 'real' ? '1' : '0'}">${opciones}</select></td>`;
+      return `<td${estiloRetardo}>${referenciaReal}<select class="inc-combo" data-idcolab="${r.idColab}" data-fecha="${d.fecha}" data-esreal="${bv.tipo === 'real' ? '1' : '0'}">${opciones}</select></td>`;
     }).join('');
 
     const etiquetaEstatus = { sinGuardar: 'Sin guardar', guardado: 'Guardado', cerrada: 'Cerrada' }[r.estatus];
