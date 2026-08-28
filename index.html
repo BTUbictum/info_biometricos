@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v71]</title>
+<title>Biométricos Colaboradores | Ubictum [v72]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v71</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v72</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1533,6 +1533,21 @@ async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax, camposMapa
 
 function cdEsperar(ms){ return new Promise(res => setTimeout(res, ms)); }
 
+// Errores transitorios de Graph/SharePoint que vale la pena reintentar:
+// 429 (límite de ritmo), cualquier 5xx, y el código "generalException" que
+// SharePoint a veces regresa bajo carga alta de escrituras — no significa
+// que el dato esté mal, solo que ese intento puntual falló y reintentando
+// normalmente sí entra.
+function esStatusTransitorio(status, body){
+  if (status === 429) return true;
+  if (status >= 500 && status < 600) return true;
+  if (body && body.error && body.error.code === 'generalException') return true;
+  return false;
+}
+function esErrorTransitorioMsg(mensaje){
+  return /Graph 429/.test(mensaje) || /Graph 5\d\d/.test(mensaje) || /generalException/.test(mensaje);
+}
+
 async function enviarLoteConReintentos(token, ids, lote, intento = 1){
   const MAX_INTENTOS = 8;
   const body = {
@@ -1549,10 +1564,10 @@ async function enviarLoteConReintentos(token, ids, lote, intento = 1){
   try {
     resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
   } catch (e) {
-    // El propio $batch chocó con el límite de ritmo (429) — todo el lote se reintenta.
-    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
+    // El propio $batch chocó con un error transitorio — todo el lote se reintenta.
+    if (esErrorTransitorioMsg(e.message) && intento < MAX_INTENTOS) {
       const espera = 1000 * Math.pow(2, intento); // 2s, 4s, 8s, 16s…
-      cdLog(`Límite de ritmo alcanzado, reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
+      cdLog(`Error transitorio (${e.message.slice(0,60)}…), reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
       await cdEsperar(espera);
       return enviarLoteConReintentos(token, ids, lote, intento + 1);
     }
@@ -1565,8 +1580,9 @@ async function enviarLoteConReintentos(token, ids, lote, intento = 1){
   resp.responses.forEach(r => {
     if (r.status >= 200 && r.status < 300) {
       insertados++;
-    } else if (r.status === 429) {
-      // Renglón individual chocó con el límite — se reintenta aparte, no se cuenta como error todavía.
+    } else if (esStatusTransitorio(r.status, r.body)) {
+      // Renglón individual chocó con algo transitorio (429 o 5xx/generalException)
+      // — se reintenta aparte, no se cuenta como error todavía.
       const idx = parseInt(r.id, 10) - 1;
       pendientesDe429.push(lote[idx]);
     } else {
@@ -1580,7 +1596,7 @@ async function enviarLoteConReintentos(token, ids, lote, intento = 1){
 
   if (pendientesDe429.length && intento < MAX_INTENTOS) {
     const espera = 1000 * Math.pow(2, intento);
-    cdLog(`${pendientesDe429.length} renglones chocaron con el límite de ritmo, reintentando en ${espera/1000}s (intento ${intento})…`);
+    cdLog(`${pendientesDe429.length} renglones con error transitorio, reintentando en ${espera/1000}s (intento ${intento})…`);
     await cdEsperar(espera);
     const reintento = await enviarLoteConReintentos(token, ids, pendientesDe429, intento + 1);
     insertados += reintento.insertados;
@@ -1915,9 +1931,9 @@ async function enviarLotePatchConReintentos(token, ids, lote, campos, intento = 
   try {
     resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
   } catch (e) {
-    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
+    if (esErrorTransitorioMsg(e.message) && intento < MAX_INTENTOS) {
       const espera = 1000 * Math.pow(2, intento);
-      cdRepLog(`Límite de ritmo alcanzado, reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
+      cdRepLog(`Error transitorio (${e.message.slice(0,60)}…), reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
       await cdEsperar(espera);
       return enviarLotePatchConReintentos(token, ids, lote, campos, intento + 1);
     }
@@ -1930,7 +1946,7 @@ async function enviarLotePatchConReintentos(token, ids, lote, campos, intento = 
   resp.responses.forEach(r => {
     if (r.status >= 200 && r.status < 300) {
       actualizados++;
-    } else if (r.status === 429) {
+    } else if (esStatusTransitorio(r.status, r.body)) {
       const idx = parseInt(r.id, 10) - 1;
       pendientesDe429.push(lote[idx]);
     } else {
@@ -1944,7 +1960,7 @@ async function enviarLotePatchConReintentos(token, ids, lote, campos, intento = 
 
   if (pendientesDe429.length && intento < MAX_INTENTOS) {
     const espera = 1000 * Math.pow(2, intento);
-    cdRepLog(`${pendientesDe429.length} renglones chocaron con el límite de ritmo, reintentando en ${espera/1000}s (intento ${intento})…`);
+    cdRepLog(`${pendientesDe429.length} renglones con error transitorio, reintentando en ${espera/1000}s (intento ${intento})…`);
     await cdEsperar(espera);
     const reintento = await enviarLotePatchConReintentos(token, ids, pendientesDe429, campos, intento + 1);
     actualizados += reintento.actualizados;
@@ -2146,9 +2162,9 @@ async function enviarLotePatchHorasExtraConReintentos(token, ids, lote, campoHor
   try {
     resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
   } catch (e) {
-    if (String(e.message).includes('429') && intento < MAX_INTENTOS) {
+    if (esErrorTransitorioMsg(e.message) && intento < MAX_INTENTOS) {
       const espera = 1000 * Math.pow(2, intento);
-      cdHeLog(`Límite de ritmo alcanzado, reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
+      cdHeLog(`Error transitorio (${e.message.slice(0,60)}…), reintentando lote completo en ${espera/1000}s (intento ${intento})…`);
       await cdEsperar(espera);
       return enviarLotePatchHorasExtraConReintentos(token, ids, lote, campoHoraExtra, intento + 1);
     }
@@ -2161,7 +2177,7 @@ async function enviarLotePatchHorasExtraConReintentos(token, ids, lote, campoHor
   resp.responses.forEach(r => {
     if (r.status >= 200 && r.status < 300) {
       actualizados++;
-    } else if (r.status === 429) {
+    } else if (esStatusTransitorio(r.status, r.body)) {
       const idx = parseInt(r.id, 10) - 1;
       pendientesDe429.push(lote[idx]);
     } else {
@@ -2175,7 +2191,7 @@ async function enviarLotePatchHorasExtraConReintentos(token, ids, lote, campoHor
 
   if (pendientesDe429.length && intento < MAX_INTENTOS) {
     const espera = 1000 * Math.pow(2, intento);
-    cdHeLog(`${pendientesDe429.length} renglones chocaron con el límite de ritmo, reintentando en ${espera/1000}s (intento ${intento})…`);
+    cdHeLog(`${pendientesDe429.length} renglones con error transitorio, reintentando en ${espera/1000}s (intento ${intento})…`);
     await cdEsperar(espera);
     const reintento = await enviarLotePatchHorasExtraConReintentos(token, ids, pendientesDe429, campoHoraExtra, intento + 1);
     actualizados += reintento.actualizados;
