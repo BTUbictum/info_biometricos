@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v75]</title>
+<title>Biométricos Colaboradores | Ubictum [v76]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v75</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v76</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1538,6 +1538,48 @@ async function buscarLlavesExistentes(token, ids, fechaMin, fechaMax, camposMapa
   return set;
 }
 
+// Verificación de respaldo: para los candidatos que la búsqueda por RANGO DE
+// FECHA catalogó como "nuevos", confirma uno por uno si esa Llave exacta ya
+// existe en la lista completa — sin depender de en qué Fecha quedó archivado
+// ese registro. Esto cubre el caso de que un registro viejo haya quedado
+// guardado con una Fecha corrida (por ejemplo, por algún bug de zona horaria
+// ya corregido) y por eso el filtro por rango no lo detecta, aunque su Llave
+// (que es el valor que SharePoint sí exige único) ya esté tomada — causando
+// que el insert truene con un error genérico en vez de reportarse como
+// duplicado. Solo se corre sobre los "nuevos" (no sobre todo el archivo), así
+// que el costo extra es proporcional a lo que realmente hace falta verificar.
+async function verificarLlavesExactas(token, ids, llaves, campoLlave){
+  const existentes = new Set();
+  const TAM_LOTE = 20;
+  for (let i = 0; i < llaves.length; i += TAM_LOTE) {
+    const lote = llaves.slice(i, i + TAM_LOTE);
+    const body = {
+      requests: lote.map((llave, j) => ({
+        id: String(j + 1),
+        method: 'GET',
+        url: `/sites/${ids.siteId}/lists/${ids.listIds.registros}/items` +
+          `?$filter=${encodeURIComponent(`fields/${campoLlave} eq '${String(llave).replace(/'/g, "''")}'`)}` +
+          `&$select=id&$top=1`,
+      })),
+    };
+    let resp;
+    try {
+      resp = await graphFetch(`${GRAPH}/$batch`, token, { method: 'POST', body: JSON.stringify(body) });
+    } catch (e) {
+      cdLog(`Aviso: no se pudo verificar duplicados exactos de un lote (${e.message.slice(0, 100)}…) — para ese lote se sigue solo con la detección por rango de fecha.`);
+      continue;
+    }
+    resp.responses.forEach(r => {
+      const idx = parseInt(r.id, 10) - 1;
+      if (r.status >= 200 && r.status < 300 && r.body && Array.isArray(r.body.value) && r.body.value.length > 0) {
+        existentes.add(lote[idx]);
+      }
+    });
+    if (i + TAM_LOTE < llaves.length) await cdEsperar(300);
+  }
+  return existentes;
+}
+
 function cdEsperar(ms){ return new Promise(res => setTimeout(res, ms)); }
 
 // Helper genérico para mandar un lote de operaciones vía $batch de Graph,
@@ -1766,7 +1808,23 @@ document.getElementById('cdBtnSubir').addEventListener('click', async () => {
     const fechaMin = fechas[0].slice(0,10), fechaMax = fechas[fechas.length - 1].slice(0,10);
 
     const llavesExistentes = await buscarLlavesExistentes(token, ids, fechaMin, fechaMax, camposMapa);
-    const nuevos = registros.filter(r => !llavesExistentes.has(r[campoLlave]));
+    let nuevos = registros.filter(r => !llavesExistentes.has(r[campoLlave]));
+
+    // Segunda pasada: de los que la búsqueda por rango de fecha marcó como
+    // "nuevos", confirma uno por uno si su Llave YA existe en realidad en
+    // algún otro lado de la lista (ver comentario en verificarLlavesExactas).
+    let duplicadosPorLlaveExacta = 0;
+    if (nuevos.length) {
+      cdLog(`Verificando ${nuevos.length} candidato(s) "nuevo(s)" contra su Llave exacta (por si alguno ya existe con una Fecha distinta a la esperada)…`);
+      const llavesReales = nuevos.map(r => r[campoLlave]);
+      const yaExistianExacto = await verificarLlavesExactas(token, ids, llavesReales, campoLlave);
+      if (yaExistianExacto.size) {
+        nuevos = nuevos.filter(r => !yaExistianExacto.has(r[campoLlave]));
+        duplicadosPorLlaveExacta = yaExistianExacto.size;
+        cdLog(`⚠ ${duplicadosPorLlaveExacta} de esos candidatos YA EXISTÍAN de verdad (su Llave ya estaba tomada, aunque cayeran fuera del rango de fecha buscado) — se omiten, no se intentan insertar de nuevo.`);
+      }
+    }
+
     const duplicados = registros.length - nuevos.length;
     document.getElementById('cdDuplicados').textContent = duplicados;
     cdLog(`${nuevos.length} registros nuevos por insertar (${duplicados} ya existían).`);
