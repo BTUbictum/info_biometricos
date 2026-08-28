@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v70]</title>
+<title>Biométricos Colaboradores | Ubictum [v71]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v70</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v71</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -691,12 +691,17 @@
         <input type="date" id="cdRepFechaHasta">
       </div>
     </div>
-    <button class="cd-btn" id="cdRepBtnBuscar" type="button">Buscar registros con datos faltantes</button>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin:12px 0; cursor:pointer;">
+      <input type="checkbox" id="cdRepForzar">
+      Forzar aunque ya tenga datos capturados (úsalo cuando corriges un error en CatColab y necesitas que se
+      reemplace lo que ya estaba guardado, no solo lo que está en blanco)
+    </label>
+    <button class="cd-btn" id="cdRepBtnBuscar" type="button">Buscar registros a actualizar</button>
 
     <div id="cdRepResumen" class="cd-summary hidden" style="margin-top:14px; grid-template-columns:repeat(4,1fr);">
-      <div class="cd-box"><div class="n" id="cdRepEncontrados">0</div><div class="l">Con datos faltantes</div></div>
-      <div class="cd-box"><div class="n" id="cdRepReparables">0</div><div class="l">Se pueden reparar</div></div>
-      <div class="cd-box"><div class="n" id="cdRepSinMatch">0</div><div class="l">Siguen sin match en CatColab</div></div>
+      <div class="cd-box"><div class="n" id="cdRepEncontrados">0</div><div class="l">Revisados en el rango</div></div>
+      <div class="cd-box"><div class="n" id="cdRepReparables">0</div><div class="l">A actualizar</div></div>
+      <div class="cd-box"><div class="n" id="cdRepSinMatch">0</div><div class="l">Sin match en CatColab</div></div>
       <div class="cd-box"><div class="n" id="cdRepActualizados">0</div><div class="l">Actualizados</div></div>
     </div>
     <button class="cd-btn hidden" id="cdRepBtnActualizar" type="button" style="margin-top:10px;">Actualizar en SharePoint</button>
@@ -1803,32 +1808,46 @@ document.getElementById('cdRepBtnBuscar').addEventListener('click', async () => 
       `&$filter=${filtro}&$top=2000`;
     const items = await graphFetchAll(url, token);
 
-    const faltantes = items.filter(it => {
+    const forzar = document.getElementById('cdRepForzar').checked;
+    // Sin forzar: solo revisa registros con algún campo en blanco (comportamiento
+    // original). Con forzar: revisa TODOS los registros del rango, incluso los
+    // que ya tienen algo capturado — para cuando corriges un error en CatColab
+    // y ese valor viejo (aunque no esté en blanco) ya quedó mal.
+    const candidatos = forzar ? items : items.filter(it => {
       const f = it.fields;
       return !f[campoFacilitador] || !f[campoLider] || !f[campoJornada];
     });
 
     const reparables = [];
-    let sinMatch = 0;
-    faltantes.forEach(it => {
-      const idColab = String(it.fields[campoIDColab] || '').trim();
+    let sinMatch = 0, yaCorrectos = 0;
+    candidatos.forEach(it => {
+      const f = it.fields;
+      const idColab = String(f[campoIDColab] || '').trim();
       const info = cdCatColab.get(idColab);
-      if (info && (info.facilitador || info.lider || info.jornada)) {
-        reparables.push({ itemId: it.id, idColab, info });
-      } else {
+      if (!info || (!info.facilitador && !info.lider && !info.jornada)) {
         sinMatch++;
+        return;
       }
+      if (forzar) {
+        const distinto = (f[campoFacilitador] || '') !== (info.facilitador || '') ||
+          (f[campoLider] || '') !== (info.lider || '') ||
+          (f[campoJornada] || '') !== (info.jornada || '');
+        if (!distinto) { yaCorrectos++; return; }
+      }
+      reparables.push({ itemId: it.id, idColab, info });
     });
 
     cdRepEncontradosData = reparables;
     document.getElementById('cdRepResumen').classList.remove('hidden');
-    document.getElementById('cdRepEncontrados').textContent = faltantes.length;
+    document.getElementById('cdRepEncontrados').textContent = candidatos.length;
     document.getElementById('cdRepReparables').textContent = reparables.length;
     document.getElementById('cdRepSinMatch').textContent = sinMatch;
     document.getElementById('cdRepActualizados').textContent = '0';
 
-    cdRepLog(`${faltantes.length} registro(s) con datos en blanco. ${reparables.length} se pueden reparar con CatColab vigente. ` +
-      `${sinMatch} siguen sin match (el colaborador tampoco está en CatColab hoy — hay que darlo de alta ahí primero).`);
+    cdRepLog(`${candidatos.length} registro(s) revisados${forzar ? ' (modo forzar: incluye los que ya tenían datos)' : ' con datos en blanco'}. ` +
+      `${reparables.length} se van a actualizar con CatColab vigente. ` +
+      `${sinMatch} sin match (el colaborador tampoco está en CatColab hoy).` +
+      (forzar ? ` ${yaCorrectos} ya estaban correctos, no se tocan.` : ''));
 
     if (reparables.length) document.getElementById('cdRepBtnActualizar').classList.remove('hidden');
   } catch (err) {
@@ -1841,9 +1860,11 @@ document.getElementById('cdRepBtnBuscar').addEventListener('click', async () => 
 
 document.getElementById('cdRepBtnActualizar').addEventListener('click', async () => {
   if (!cdRepEncontradosData.length) return;
+  const forzar = document.getElementById('cdRepForzar').checked;
   const ok = await incConfirmar(
-    `Se van a actualizar ${cdRepEncontradosData.length} registro(s) en RegBio26 con el Facilitador/Líder/Jornada vigente en CatColab.\n\n` +
-    `Esto NO toca checadas, horas ni ningún otro campo. ¿Confirmas?`
+    `Se van a actualizar ${cdRepEncontradosData.length} registro(s) en RegBio26 con el Facilitador/Líder/Jornada vigente en CatColab` +
+    (forzar ? `, INCLUYENDO registros que ya tenían un valor capturado (modo forzar activado — se reemplazará por el vigente).` : '.') +
+    `\n\nEsto NO toca checadas, horas ni ningún otro campo. ¿Confirmas?`
   );
   if (!ok) return;
 
