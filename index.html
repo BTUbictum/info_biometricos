@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v77]</title>
+<title>Biométricos Colaboradores | Ubictum [v78]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v77</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v78</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -735,24 +735,6 @@
     </div>
     <button class="cd-btn hidden" id="cdHeBtnActualizar" type="button" style="margin-top:10px;">Actualizar en SharePoint</button>
     <div class="cd-log" id="cdHeLog" style="margin-top:14px;"></div>
-  </div>
-
-  <div class="card" style="margin-top:28px;">
-    <h2 style="font-size:16px; margin-bottom:4px;">Modo prueba: aislar el error de inserción</h2>
-    <p style="font-size:13px; color:var(--gris,#636469); margin-bottom:14px; max-width:720px;">
-      Manda 10 registros REALES que sabemos que fallan en RegBio26 (sacados tal cual de los logs de error) a una
-      lista de prueba vacía, usando el mismo código de inserción. Si ahí SÍ entran, el problema es propio de
-      RegBio26. Si ahí TAMBIÉN fallan, es algo más general (no tiene que ver con esa lista en particular).
-      Crea primero una lista vacía en el mismo sitio (con las mismas columnas de RegBio26, o al menos: IDColab,
-      Nombre, Grupo, TurnoAsignado, TurnoEfectivo, Area, TipoColab, Fecha, Hora, Semana, YearSemana, Biometrico,
-      Llave, Facilitador, Lider, Jornada, HoraExtra) y escribe aquí su nombre exacto.
-    </p>
-    <div class="reg-campo" style="max-width:320px;">
-      <label>Nombre de la lista de prueba</label>
-      <input type="text" id="cdPruebaListaNombre" value="RegBio26_Prueba">
-    </div>
-    <button class="cd-btn" id="cdPruebaBtn" type="button" style="margin-top:12px;">Insertar los 10 registros de prueba</button>
-    <div class="cd-log" id="cdPruebaLog" style="margin-top:14px;"></div>
   </div>
 
   </div><!-- /cdContenido -->
@@ -1209,43 +1191,6 @@ async function resolverCamposRegistros(token, ids){
   const mapa = {};
   cols.forEach(c => { mapa[c.displayName] = c.name; });
   cdCamposRegistros = mapa;
-  return mapa;
-}
-
-/* ============================================================
- * MODO PRUEBA — aislar si el error es de RegBio26 o del método
- * ------------------------------------------------------------
- * Toma 10 registros REALES que sabemos que fallan en RegBio26
- * (capturados tal cual de los logs de error) y los manda, con el
- * mismo código Graph $batch, a una lista de prueba distinta que
- * el usuario crea vacía. Si ahí SÍ entran, el problema es propio
- * de RegBio26; si ahí TAMBIÉN fallan, es algo más general (app,
- * token, tenant) y no tiene que ver con esa lista en particular.
- * ============================================================ */
-const PRUEBA_REGISTROS_PROBLEMATICOS = [
-  { IDColab:"101618", Nombre:"Mariana Jimenez Cruz", Grupo:"Almacén", TurnoAsignado:"Turno Vespertino", TurnoEfectivo:"T3 U2", Area:"Área Surtido", TipoColab:"Sindicalizado", Fecha:"2026-08-27T00:00:00Z", Hora:"10:11:45", Semana:"35", YearSemana:"2026", Biometrico:"UBI2 Asistencia almacén", Llave:"101618_2026-08-27_10:11:45", Facilitador:"David Ibarra Lopez", Lider:"Luis Serrano", Jornada:"10:30-20:00", HoraExtra:0 },
-  { IDColab:"101683", Nombre:"ESPERANZA MONTSERRATH GUZMAN NAVA", Grupo:"Almacén", TurnoAsignado:"Turno Diurno", TurnoEfectivo:"T3 U2", Area:"Área 3PL", TipoColab:"Sindicalizado", Fecha:"2026-08-27T00:00:00Z", Hora:"14:56:28", Semana:"35", YearSemana:"2026", Biometrico:"Door_Panorama Comedor", Llave:"101683_2026-08-27_14:56:28", Facilitador:"Mariel Aguilar Pallares", Lider:"Miguel Angel Llamas Rodriguez", Jornada:"10:30-20:00", HoraExtra:0 },
-  { IDColab:"2009820", Nombre:"Brian Isaac Hernandez Castañeda", Grupo:"Almacén", TurnoAsignado:"Turno Diurno", TurnoEfectivo:"T3 U2", Area:"Área 3PL", TipoColab:"Confianza", Fecha:"2026-08-27T00:00:00Z", Hora:"20:41:13", Semana:"35", YearSemana:"2026", Biometrico:"Área 3PL", Llave:"2009820_2026-08-27_20:41:13", Facilitador:"Miguel Angel Llamas Rodríguez", Lider:"Miguel Angel Llamas Rodriguez", Jornada:"10:30-20:00", HoraExtra:1 },
-  { IDColab:"101093", Nombre:"ALEXANDRA EMILIO\tGOMEZ", Grupo:"Almacén", TurnoAsignado:"Turno Diurno", TurnoEfectivo:"T3 U2", Area:"Área 3PL", TipoColab:"Sindicalizado", Fecha:"2026-08-27T00:00:00Z", Hora:"10:18:43", Semana:"35", YearSemana:"2026", Biometrico:"Área 3PL", Llave:"101093_2026-08-27_10:18:43", Facilitador:"Brian Isaac Hernández Castañeda", Lider:"Miguel Angel Llamas Rodriguez", Jornada:"10:30-20:00", HoraExtra:0 },
-  { IDColab:"918777", Nombre:"ADRIAN SANDOVAL SIERRA", Grupo:"Almacén", TurnoAsignado:"Turno Diurno", TurnoEfectivo:"T3 U2", Area:"Área Acomodo", TipoColab:"Sindicalizado", Fecha:"2026-08-27T00:00:00Z", Hora:"11:08:14", Semana:"35", YearSemana:"2026", Biometrico:"Door_Panorama Comedor", Llave:"918777_2026-08-27_11:08:14", Facilitador:"Jorge Alcaraz", Lider:"Cesar Mendez Parra", Jornada:"7:00-16:35", HoraExtra:0 },
-  { IDColab:"101804", Nombre:"Mariela Rogel Montero", Grupo:"Almacén", TurnoAsignado:"Operaciones RRRP Vespertino", TurnoEfectivo:"T1 U1", Area:"Sindicalizado-Vespertino", TipoColab:"", Fecha:"2026-08-27T00:00:00Z", Hora:"15:34:43", Semana:"35", YearSemana:"2026", Biometrico:"UBI2 Vestidores mujeres Afuera", Llave:"101804_2026-08-27_15:34:43", Facilitador:"Edgar Perez Vilchiz", Lider:"Luis Serrano", Jornada:"6:00-15:35", HoraExtra:0 },
-  { IDColab:"101282", Nombre:"EVA AGUILAR\tCRUZ", Grupo:"Almacén", TurnoAsignado:"Turno Diurno", TurnoEfectivo:"T1 U1", Area:"Área 3PL", TipoColab:"Sindicalizado", Fecha:"2026-08-28T00:00:00Z", Hora:"06:51:54", Semana:"35", YearSemana:"2026", Biometrico:"Área 3PL", Llave:"101282_2026-08-28_06:51:54", Facilitador:"Mariel Aguilar Pallares", Lider:"Miguel Angel Llamas Rodriguez", Jornada:"7:00-16:35", HoraExtra:0 },
-  { IDColab:"101749", Nombre:"Maria Fernanda Martinez Estrada", Grupo:"Almacén", TurnoAsignado:"Operaciones RRRP Vespertino", TurnoEfectivo:"T1 U1", Area:"Sindicalizado-Vespertino", TipoColab:"", Fecha:"2026-08-28T00:00:00Z", Hora:"06:04:03", Semana:"35", YearSemana:"2026", Biometrico:"UBI2 Vestidores mujeres Afuera", Llave:"101749_2026-08-28_06:04:03", Facilitador:"Edgar Perez Vilchiz", Lider:"Luis Serrano", Jornada:"6:00-15:35", HoraExtra:0 },
-  { IDColab:"100596", Nombre:"AVELINA DELGADO SANTAMAND", Grupo:"Almacén", TurnoAsignado:"Turno Diurno", TurnoEfectivo:"T1 U1", Area:"Área CADMAN", TipoColab:"Sindicalizado", Fecha:"2026-08-27T00:00:00Z", Hora:"15:25:27", Semana:"35", YearSemana:"2026", Biometrico:"Ubictum Area Descanso Salida", Llave:"100596_2026-08-27_15:25:27", Facilitador:"Mireya López", Lider:"Cesar Mendez Parra", Jornada:"7:00-16:35", HoraExtra:0 },
-  { IDColab:"101248", Nombre:"MARIA GUADALUPE GRANADOS\tAVILES", Grupo:"Almacén", TurnoAsignado:"Turno Diurno", TurnoEfectivo:"T1 U1", Area:"Área 3PL", TipoColab:"Sindicalizado", Fecha:"2026-08-27T00:00:00Z", Hora:"10:32:16", Semana:"35", YearSemana:"2026", Biometrico:"Door_Panorama Comedor", Llave:"101248_2026-08-27_10:32:16", Facilitador:"Mariel Aguilar Pallares", Lider:"Miguel Angel Llamas Rodriguez", Jornada:"6:00-15:35", HoraExtra:0 },
-];
-
-async function resolverListaPorNombre(token, siteId, nombreLista){
-  const listas = await graphFetchAll(`${GRAPH}/sites/${siteId}/lists?$select=id,displayName`, token);
-  const found = listas.find(l => l.displayName === nombreLista);
-  if (!found) throw new Error(`No se encontró la lista "${nombreLista}" en el sitio. Revisa que el nombre esté exactamente igual (mayúsculas/espacios incluidos).`);
-  return found.id;
-}
-
-async function resolverColumnasDeLista(token, siteId, listId){
-  const cols = await graphFetchAll(`${GRAPH}/sites/${siteId}/lists/${listId}/columns?$select=name,displayName`, token);
-  const mapa = {};
-  cols.forEach(c => { mapa[c.displayName] = c.name; });
   return mapa;
 }
 
@@ -2265,57 +2210,6 @@ async function actualizarHorasExtraEnLotes(token, ids, operaciones, campoHoraExt
   }
   return { actualizados, errores };
 }
-
-/* ============================================================
- * MODO PRUEBA — handler del botón
- * ============================================================ */
-function cdPruebaLog(msg){
-  const el = document.getElementById('cdPruebaLog');
-  el.textContent += (el.textContent ? '\n' : '') + msg;
-}
-
-document.getElementById('cdPruebaBtn').addEventListener('click', async () => {
-  const nombreLista = document.getElementById('cdPruebaListaNombre').value.trim();
-  if (!nombreLista) { await incAvisar('Escribe el nombre exacto de la lista de prueba.'); return; }
-
-  const btn = document.getElementById('cdPruebaBtn');
-  btn.disabled = true;
-  document.getElementById('cdPruebaLog').textContent = '';
-  try {
-    const token = await obtenerTokenGraph();
-    const ids = await resolverGraphIds(token);
-
-    cdPruebaLog(`Buscando la lista "${nombreLista}"…`);
-    const listaId = await resolverListaPorNombre(token, ids.siteId, nombreLista);
-    cdPruebaLog('Lista encontrada. Resolviendo sus columnas…');
-    const camposTest = await resolverColumnasDeLista(token, ids.siteId, listaId);
-
-    const idsTest = { siteId: ids.siteId, listIds: { registros: listaId } };
-    const construir = (reg) => ({
-      method: 'POST',
-      url: `/sites/${idsTest.siteId}/lists/${idsTest.listIds.registros}/items`,
-      headers: { 'Content-Type': 'application/json' },
-      body: { fields: Object.fromEntries(Object.entries(reg).map(([k, v]) => [camposTest[k] || k, v])) },
-    });
-
-    cdPruebaLog(`Insertando ${PRUEBA_REGISTROS_PROBLEMATICOS.length} registro(s) de prueba (los mismos que fallan en RegBio26) en "${nombreLista}"…`);
-    const res = await ejecutarLoteGraphBatch(token, idsTest, PRUEBA_REGISTROS_PROBLEMATICOS, construir, cdPruebaLog);
-    cdPruebaLog(`Resultado: ${res.exitos} insertados, ${res.errores} con error.`);
-
-    if (res.exitos === PRUEBA_REGISTROS_PROBLEMATICOS.length) {
-      cdPruebaLog('✅ TODOS entraron sin problema en la lista de prueba — el problema es específico de RegBio26, no del método de inserción ni de estos datos.');
-    } else if (res.exitos === 0) {
-      cdPruebaLog('❌ NINGUNO entró, mismo error — el problema NO es específico de RegBio26 (es algo más general: la app, el token, o el tenant).');
-    } else {
-      cdPruebaLog('⚠ Resultado mixto — parcialmente reproducible, hay que revisar juntos cuáles sí entraron y cuáles no.');
-    }
-  } catch (err) {
-    console.error(err);
-    cdPruebaLog('ERROR: ' + err.message);
-  } finally {
-    btn.disabled = false;
-  }
-});
 
 
 /* ============================================================
