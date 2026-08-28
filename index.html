@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v73]</title>
+<title>Biométricos Colaboradores | Ubictum [v74]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v73</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v74</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1478,7 +1478,7 @@ function construirRegistrosParaSubir(porColab, camposMapa){
         const horaStr = cdParaHoraStr(r.dt);
         const { semana, year } = cdSemanaISO(r.dt);
         const llave = `${r.idColab}_${fechaStr}_${horaStr}`;
-        salida.push({
+        const registro = {
           [c('IDColab')]: r.idColab,
           [c('Nombre')]: r.nombre,
           [c('Grupo')]: r.grupo,
@@ -1495,8 +1495,15 @@ function construirRegistrosParaSubir(porColab, camposMapa){
           [c('Facilitador')]: catColabInfo.facilitador,
           [c('Lider')]: catColabInfo.lider,
           [c('Jornada')]: catColabInfo.jornada,
-          [c('HoraExtra')]: horaExtra,
-        });
+        };
+        // HoraExtra: solo se incluye la llave en el body cuando SÍ hay un
+        // valor calculado. Mandar explícitamente "null" a una columna
+        // numérica de SharePoint vía Graph puede provocar un error genérico
+        // (generalException) en la creación del elemento — así que si aún
+        // no se puede calcular, simplemente se omite el campo (queda en
+        // blanco por default) en vez de forzar un null.
+        if (horaExtra !== null) registro[c('HoraExtra')] = horaExtra;
+        salida.push(registro);
       });
     });
   });
