@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v74]</title>
+<title>Biométricos Colaboradores | Ubictum [v75]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v74</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v75</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1589,7 +1589,9 @@ async function ejecutarLoteGraphBatch(token, ids, items, construirRequest, logFn
     }
     const clase = claseErrorGraph(r.status, r.body, null);
     if (!yaMostroDetalle) {
+      const idxDetalle = parseInt(r.id, 10) - 1;
       logFn(`Detalle del error (renglón ${r.id}, clase ${clase || 'definitivo'}): ` + JSON.stringify(r.body || r).slice(0, 500));
+      logFn(`Dato que se intentó mandar en ese renglón: ` + JSON.stringify(construirRequest(items[idxDetalle])).slice(0, 800));
       yaMostroDetalle = true;
     }
     const idx = parseInt(r.id, 10) - 1;
