@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v83]</title>
+<title>Biométricos Colaboradores | Ubictum [v84]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v83</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v84</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2282,6 +2282,10 @@ document.getElementById('cdReabrirBtnBuscar').addEventListener('click', async ()
       `&$filter=${filtro}&$top=5000`;
     const items = await graphFetchAll(url, token);
     cdReabrirLog(`(${items.length} registro(s) en ese rango ampliado, antes de filtrar por fecha exacta y estatus Cerrado)`);
+    if (items.length) {
+      cdReabrirLog('DIAGNÓSTICO — primer registro crudo tal como llega de Graph: ' + JSON.stringify(items[0].fields));
+      cdReabrirLog(`DIAGNÓSTICO — nombres internos que estoy usando: Fecha="${ic('Fecha')}", Cerrado="${ic('Cerrado')}", IDColab="${ic('IDColab')}"`);
+    }
 
     // Filtro fino por fecha exacta (el rango de arriba trae 1 día extra de
     // margen de cada lado a propósito, aquí se recorta a la semana real).
@@ -2291,6 +2295,7 @@ document.getElementById('cdReabrirBtnBuscar').addEventListener('click', async ()
       const fecha = new Date(fechaRaw).toISOString().slice(0, 10);
       return fecha >= lunesStr && fecha <= domingoStr;
     });
+    cdReabrirLog(`${itemsEnSemana.length} registro(s) quedaron dentro de la semana exacta (${lunesStr} a ${domingoStr}).`);
 
     const cerrados = itemsEnSemana.filter(it => {
       const f = it.fields;
