@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v89]</title>
+<title>Biométricos Colaboradores | Ubictum [v90]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v89</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v90</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1429,6 +1429,19 @@ function esJornadaNocturna(jornadaStr){
   const iniMin = hhmmAMin(ini), finMin = hhmmAMin(fin);
   if (iniMin == null || finMin == null) return null;
   return finMin <= iniMin;
+}
+
+// Para decidir si un colaborador es diurno/nocturno SIEMPRE se prioriza
+// CatColab vigente (por IDColab) sobre la Jornada snapshot guardada en un
+// registro suelto de RegBio26 — esa snapshot puede haber quedado vacía o
+// desactualizada si CatColab no tenía el dato correcto al momento exacto
+// de esa carga en particular (mismo tipo de desfase ya visto con
+// Facilitador/Líder). Si ni CatColab ni la snapshot tienen algo utilizable,
+// se regresa cadena vacía (jornada desconocida → respaldo seguro en
+// agruparEnSesiones).
+function jornadaVigenteODeSnapshot(idColab, jornadaSnapshot){
+  const info = (cdCatColab && idColab) ? cdCatColab.get(idColab) : null;
+  return (info && info.jornada) ? info.jornada : (jornadaSnapshot || '');
 }
 
 function agruparEnSesiones(registrosOrdenados, esNocturno){
@@ -2733,6 +2746,7 @@ async function diaBuscar(){
     const token = await obtenerTokenGraph();
     if (!regIds) regIds = await resolverGraphIds(token);
     if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+    await cargarCatalogos(token, regIds); // asegura cdCatColab vigente (Jornada) para agrupar sesiones correctamente
     const c = (n) => regCamposMapa[n] || n;
 
     const desdeStr = document.getElementById('diaFechaDesde').value;
@@ -2779,7 +2793,7 @@ async function diaBuscar(){
     const filas = [];
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(ordenados[0] ? ordenados[0].jornada : ''));
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(ordenados[0] ? ordenados[0].idColab : '', ordenados[0] ? ordenados[0].jornada : '')));
       sesiones.forEach(sesion => {
         const entrada = sesion.registros[0];
         const salida = sesion.registros[sesion.registros.length - 1];
@@ -3002,7 +3016,7 @@ async function semBuscar(){
     const filas = [];
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(ordenados[0] ? ordenados[0].jornada : ''));
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(ordenados[0] ? ordenados[0].idColab : '', ordenados[0] ? ordenados[0].jornada : '')));
 
       // Días de esa semana (0=Lun..6=Dom) con su sesión correspondiente.
       const porDia = new Array(7).fill(null);
@@ -3204,6 +3218,7 @@ async function bioBuscar(){
     const token = await obtenerTokenGraph();
     if (!regIds) regIds = await resolverGraphIds(token);
     if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+    await cargarCatalogos(token, regIds); // asegura cdCatColab vigente (Jornada) para agrupar sesiones correctamente
     const c = (n) => regCamposMapa[n] || n;
 
     // Margen de 1 día de cada lado para no cortar sesiones nocturnas en el borde.
@@ -3245,7 +3260,7 @@ async function bioBuscar(){
     const filas = [];
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(ordenados[0] ? ordenados[0].jornada : ''));
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(ordenados[0] ? ordenados[0].idColab : '', ordenados[0] ? ordenados[0].jornada : '')));
       sesiones.forEach(sesion => {
         const entrada = sesion.registros[0];
         const salida = sesion.registros[sesion.registros.length - 1];
@@ -3635,7 +3650,7 @@ async function incBuscar(){
     const filas = [];
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(ordenados[0] ? ordenados[0].jornada : ''));
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(ordenados[0] ? ordenados[0].idColab : '', ordenados[0] ? ordenados[0].jornada : '')));
 
       const porDiaSesion = new Array(7).fill(null);
       sesiones.forEach(sesion => {
