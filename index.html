@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v79]</title>
+<title>Biométricos Colaboradores | Ubictum [v80]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v79</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v80</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -3364,18 +3364,25 @@ async function incBuscar(){
 
       // "Lo mío": Facilitador/Líder sin ningún rol elevado solo ven a sus
       // propios colaboradores — Y a los colaboradores de SUS facilitadores
-      // (árbol Líder → Facilitador → Colaborador). El segundo salto se
-      // resuelve buscando, en CatColab, cuál es el Líder propio del
-      // Facilitador de este colaborador (no basta con el campo Lider del
-      // colaborador mismo, que en la práctica suele traer solo su jefe
-      // directo — el Facilitador — y no al líder de arriba).
+      // (árbol Líder → Facilitador → Colaborador).
+      //
+      // Importante: NO usamos el Facilitador/Lider guardado en el registro
+      // de asistencia (RegBio26) porque es un snapshot tomado una sola vez
+      // al momento de la Carga de Data — si CatColab no tenía la asignación
+      // correcta en ese momento (por ejemplo, porque se agregó/corrigió
+      // después), ese registro se queda con el dato viejo para siempre.
+      // En vez de eso, consultamos CatColab VIGENTE por IDColab, que
+      // siempre refleja la asignación actual.
       if (usuario.esOperaciones && !usuario.esElevado) {
-        const liderDeSuFacilitador = (cdLiderPorNombre && primerConDatos.facilitador)
-          ? cdLiderPorNombre.get(String(primerConDatos.facilitador).trim())
+        const catColabInfoVigente = cdCatColab ? cdCatColab.get(idColab) : null;
+        const facilitadorVigente = catColabInfoVigente ? catColabInfoVigente.facilitador : primerConDatos.facilitador;
+        const liderVigente = catColabInfoVigente ? catColabInfoVigente.lider : primerConDatos.lider;
+        const liderDeSuFacilitador = (cdLiderPorNombre && facilitadorVigente)
+          ? cdLiderPorNombre.get(String(facilitadorVigente).trim())
           : '';
         const esSuyo = usuario.nombre && (
-          primerConDatos.facilitador === usuario.nombre ||
-          primerConDatos.lider === usuario.nombre ||
+          facilitadorVigente === usuario.nombre ||
+          liderVigente === usuario.nombre ||
           liderDeSuFacilitador === usuario.nombre
         );
         if (!esSuyo) return;
