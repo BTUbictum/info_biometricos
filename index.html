@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v87]</title>
+<title>Biométricos Colaboradores | Ubictum [v88]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v87</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v88</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2430,7 +2430,20 @@ document.getElementById('cdReabrirBtnConfirmar').addEventListener('click', async
       headers: { 'Content-Type': 'application/json' },
       body: { [campoCerrado]: 'No' },
     });
-    const res = await ejecutarLoteGraphBatch(token, ids, pendientes, construir, cdReabrirLog);
+    // Graph solo acepta hasta 20 peticiones por $batch — se trocea en lotes,
+    // igual que las demás herramientas de esta pestaña.
+    const TAM_LOTE = 20;
+    const PAUSA_ENTRE_LOTES_MS = 500;
+    let exitos = 0, errores = 0;
+    for (let i = 0; i < pendientes.length; i += TAM_LOTE) {
+      const lote = pendientes.slice(i, i + TAM_LOTE);
+      const resLote = await ejecutarLoteGraphBatch(token, ids, lote, construir, cdReabrirLog);
+      exitos += resLote.exitos;
+      errores += resLote.errores;
+      cdReabrirLog(`Progreso: ${Math.min(i + TAM_LOTE, pendientes.length)}/${pendientes.length}`);
+      if (i + TAM_LOTE < pendientes.length) await cdEsperar(PAUSA_ENTRE_LOTES_MS);
+    }
+    const res = { exitos, errores };
 
     document.getElementById('cdReabrirActualizados').textContent = res.exitos;
     cdReabrirLog(`Listo. ${res.exitos} registro(s) reabiertos, ${res.errores} errores.`);
