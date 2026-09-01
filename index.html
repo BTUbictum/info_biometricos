@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v81]</title>
+<title>Biométricos Colaboradores | Ubictum [v82]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v81</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v82</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -735,6 +735,34 @@
     </div>
     <button class="cd-btn hidden" id="cdHeBtnActualizar" type="button" style="margin-top:10px;">Actualizar en SharePoint</button>
     <div class="cd-log" id="cdHeLog" style="margin-top:14px;"></div>
+  </div>
+
+  <div class="card" style="margin-top:28px;">
+    <h2 style="font-size:16px; margin-bottom:4px;">Reabrir Semana (Registro Incidencias)</h2>
+    <p style="font-size:13px; color:var(--gris,#636469); margin-bottom:14px; max-width:720px;">
+      Quita el bloqueo de "Semana Cerrada" en RegIncidencias para que Facilitador/Líder puedan volver a editar. Pon el
+      ID de un colaborador para reabrirle solo a él esa semana, o déjalo en blanco para reabrir a TODOS los que
+      tengan esa semana cerrada. No toca los códigos ya guardados (F/A/PSG/etc.), solo quita el candado de cierre.
+    </p>
+    <div class="reg-filtros">
+      <div class="reg-campo">
+        <label>Semana</label>
+        <input type="week" id="cdReabrirSemana">
+      </div>
+      <div class="reg-campo">
+        <label>ID Colaborador (opcional)</label>
+        <input type="text" id="cdReabrirIdColab" placeholder="Ej. 100357 — déjalo vacío para todos">
+      </div>
+    </div>
+    <button class="cd-btn" id="cdReabrirBtnBuscar" type="button">Buscar semanas cerradas</button>
+
+    <div id="cdReabrirResumen" class="cd-summary hidden" style="margin-top:14px; grid-template-columns:repeat(3,1fr);">
+      <div class="cd-box"><div class="n" id="cdReabrirColabs">0</div><div class="l">Colaborador(es) cerrados</div></div>
+      <div class="cd-box"><div class="n" id="cdReabrirRegistros">0</div><div class="l">Registros de día a reabrir</div></div>
+      <div class="cd-box"><div class="n" id="cdReabrirActualizados">0</div><div class="l">Reabiertos</div></div>
+    </div>
+    <button class="cd-btn hidden" id="cdReabrirBtnConfirmar" type="button" style="margin-top:10px;">Reabrir Semana</button>
+    <div class="cd-log" id="cdReabrirLog" style="margin-top:14px;"></div>
   </div>
 
   </div><!-- /cdContenido -->
@@ -2201,6 +2229,119 @@ document.getElementById('cdHeBtnActualizar').addEventListener('click', async () 
     btn.disabled = false;
   }
 });
+
+/* ============================================================
+ * REABRIR SEMANA — quita el candado de "Cerrada" en RegIncidencias
+ * ------------------------------------------------------------
+ * Cerrado se guarda por renglón de día (uno por cada uno de los 7
+ * días de la semana, por colaborador). Se considera "cerrada" si
+ * CUALQUIERA de esos 7 tiene Cerrado="Sí" — así que para reabrir de
+ * verdad hay que poner "No" en TODOS los renglones de esa semana
+ * para ese colaborador, no solo en uno.
+ * ============================================================ */
+function cdReabrirLog(msg){
+  const el = document.getElementById('cdReabrirLog');
+  el.textContent += (el.textContent ? '\n' : '') + msg;
+}
+
+let cdReabrirPendientes = []; // [{ itemId }]
+
+document.getElementById('cdReabrirBtnBuscar').addEventListener('click', async () => {
+  const valorSemana = document.getElementById('cdReabrirSemana').value;
+  if (!valorSemana) { await incAvisar('Selecciona una semana.'); return; }
+  const idColabFiltro = document.getElementById('cdReabrirIdColab').value.trim();
+
+  const btn = document.getElementById('cdReabrirBtnBuscar');
+  btn.disabled = true;
+  document.getElementById('cdReabrirLog').textContent = '';
+  document.getElementById('cdReabrirResumen').classList.add('hidden');
+  document.getElementById('cdReabrirBtnConfirmar').classList.add('hidden');
+  try {
+    const [year, semana] = valorSemana.split('-W').map(Number);
+    const { lunes, domingo } = semanaAFechas(year, semana);
+    const lunesStr = lunes.toISOString().slice(0, 10);
+    const domingoStr = domingo.toISOString().slice(0, 10);
+
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+    const camposMapa = await resolverCamposRegIncidencias(token, ids);
+    const ic = (n) => camposMapa[n] || n;
+
+    cdReabrirLog(`Buscando registros de la semana ${lunesStr} a ${domingoStr}${idColabFiltro ? ` para el colaborador ${idColabFiltro}` : ' (todos)'}…`);
+    const filtro = encodeURIComponent(`fields/${ic('Fecha')} ge '${lunesStr}T00:00:00Z' and fields/${ic('Fecha')} le '${domingoStr}T23:59:59Z'`);
+    const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items` +
+      `?expand=fields(select=${ic('IDColab')},${ic('Cerrado')})` +
+      `&$filter=${filtro}&$top=5000`;
+    const items = await graphFetchAll(url, token);
+
+    const cerrados = items.filter(it => {
+      const f = it.fields;
+      const cerradoTxt = String(f[ic('Cerrado')] || '').trim().toLowerCase();
+      const esCerrado = cerradoTxt === 'sí' || cerradoTxt === 'si';
+      const idColab = String(f[ic('IDColab')] || '').trim();
+      if (!esCerrado) return false;
+      if (idColabFiltro && idColab !== idColabFiltro) return false;
+      return true;
+    });
+
+    const idsColabUnicos = new Set(cerrados.map(it => String(it.fields[ic('IDColab')] || '').trim()));
+    cdReabrirPendientes = cerrados.map(it => ({ itemId: it.id }));
+
+    document.getElementById('cdReabrirResumen').classList.remove('hidden');
+    document.getElementById('cdReabrirColabs').textContent = idsColabUnicos.size;
+    document.getElementById('cdReabrirRegistros').textContent = cerrados.length;
+    document.getElementById('cdReabrirActualizados').textContent = '0';
+
+    cdReabrirLog(`${idsColabUnicos.size} colaborador(es) con esa semana cerrada, ${cerrados.length} registro(s) de día a reabrir.`);
+    if (cerrados.length) document.getElementById('cdReabrirBtnConfirmar').classList.remove('hidden');
+    else cdReabrirLog('No hay nada que reabrir con esos filtros.');
+  } catch (err) {
+    console.error(err);
+    cdReabrirLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('cdReabrirBtnConfirmar').addEventListener('click', async () => {
+  if (!cdReabrirPendientes.length) return;
+  const ok = await incConfirmar(
+    `Se va a quitar el candado de "Cerrada" en ${cdReabrirPendientes.length} registro(s) de día en RegIncidencias.\n\n` +
+    `Esto NO borra ni cambia los códigos ya guardados (F/A/PSG/etc.), solo permite que Facilitador/Líder vuelvan a editar esa semana. ¿Confirmas?`
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('cdReabrirBtnConfirmar');
+  btn.disabled = true;
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+    const camposMapa = await resolverCamposRegIncidencias(token, ids);
+    const campoCerrado = camposMapa['Cerrado'] || 'Cerrado';
+
+    const construir = (op) => ({
+      method: 'PATCH',
+      url: `/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items/${op.itemId}/fields`,
+      headers: { 'Content-Type': 'application/json' },
+      body: { [campoCerrado]: 'No' },
+    });
+    const res = await ejecutarLoteGraphBatch(token, ids, cdReabrirPendientes, construir, cdReabrirLog);
+
+    document.getElementById('cdReabrirActualizados').textContent = res.exitos;
+    cdReabrirLog(`Listo. ${res.exitos} registro(s) reabiertos, ${res.errores} errores.`);
+    if (!res.errores) {
+      cdReabrirPendientes = [];
+      document.getElementById('cdReabrirBtnConfirmar').classList.add('hidden');
+    }
+  } catch (err) {
+    console.error(err);
+    cdReabrirLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+
 
 async function enviarLotePatchHorasExtraConReintentos(token, ids, lote, campoHoraExtra){
   const construir = (op) => ({
