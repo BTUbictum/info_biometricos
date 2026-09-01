@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v80]</title>
+<title>Biométricos Colaboradores | Ubictum [v81]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v80</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v81</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1128,6 +1128,17 @@ let cdCamposRegistros = null; // mapa displayName -> nombre interno real, para R
 let cdCatColab = null;     // Map IDColab -> { facilitador, lider }
 let cdLiderPorNombre = null; // Map Nombre (de cualquier persona en CatColab) -> su propio Lider — para resolver el árbol Líder→Facilitador→Colaborador
 
+// Compara nombres de persona ignorando acentos, mayúsculas y espacios extra
+// — para no fallar por diferencias de captura entre listas (ej. "Rodríguez"
+// vs "Rodriguez", o espacios dobles) que a simple vista son invisibles.
+function normalizarNombre(s){
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 function cdLog(msg){
   const el = document.getElementById('cdLog');
   el.textContent += msg + '\n';
@@ -1305,7 +1316,7 @@ async function cargarCatalogos(token, ids){
     const idColab = f[cc('IDColab')];
     const nombrePropio = f[cc('Nombre')];
     if (nombrePropio) {
-      cdLiderPorNombre.set(String(nombrePropio).trim(), f[cc('Lider')] || '');
+      cdLiderPorNombre.set(normalizarNombre(nombrePropio), f[cc('Lider')] || '');
     }
     if (idColab) {
       cdCatColab.set(String(idColab).trim(), {
@@ -3378,12 +3389,13 @@ async function incBuscar(){
         const facilitadorVigente = catColabInfoVigente ? catColabInfoVigente.facilitador : primerConDatos.facilitador;
         const liderVigente = catColabInfoVigente ? catColabInfoVigente.lider : primerConDatos.lider;
         const liderDeSuFacilitador = (cdLiderPorNombre && facilitadorVigente)
-          ? cdLiderPorNombre.get(String(facilitadorVigente).trim())
+          ? cdLiderPorNombre.get(normalizarNombre(facilitadorVigente))
           : '';
-        const esSuyo = usuario.nombre && (
-          facilitadorVigente === usuario.nombre ||
-          liderVigente === usuario.nombre ||
-          liderDeSuFacilitador === usuario.nombre
+        const nombreUsuarioNorm = normalizarNombre(usuario.nombre);
+        const esSuyo = nombreUsuarioNorm && (
+          normalizarNombre(facilitadorVigente) === nombreUsuarioNorm ||
+          normalizarNombre(liderVigente) === nombreUsuarioNorm ||
+          normalizarNombre(liderDeSuFacilitador) === nombreUsuarioNorm
         );
         if (!esSuyo) return;
       }
