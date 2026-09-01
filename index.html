@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v88]</title>
+<title>Biométricos Colaboradores | Ubictum [v89]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v88</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v89</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1419,15 +1419,41 @@ function cdSemanaISO(d){
  * ============================================================ */
 const LIMITE_MAX_HORAS = 13;
 
-function agruparEnSesiones(registrosOrdenados){
+// Determina si una Jornada ("HH:MM-HH:MM") cruza medianoche (nocturna) o no
+// (diurna). Devuelve null si la cadena no se puede interpretar (jornada
+// desconocida/vacía) — en ese caso agruparEnSesiones() usa el criterio
+// viejo (solo horas transcurridas) como respaldo seguro.
+function esJornadaNocturna(jornadaStr){
+  if (!jornadaStr || !String(jornadaStr).includes('-')) return null;
+  const [ini, fin] = String(jornadaStr).split('-').map(s => s.trim());
+  const iniMin = hhmmAMin(ini), finMin = hhmmAMin(fin);
+  if (iniMin == null || finMin == null) return null;
+  return finMin <= iniMin;
+}
+
+function agruparEnSesiones(registrosOrdenados, esNocturno){
   const sesiones = [];
   let i = 0;
   const n = registrosOrdenados.length;
   while (i < n) {
     const entrada = registrosOrdenados[i];
     let j = i;
-    while (j + 1 < n && (registrosOrdenados[j + 1].dt - entrada.dt) / 3600000 <= LIMITE_MAX_HORAS) {
-      j++;
+    if (esNocturno === false) {
+      // Jornada diurna confirmada: se agrupa TODO lo que caiga en el mismo
+      // día calendario que la entrada, sin importar cuántas horas pasen
+      // entre checadas — un día largo con horas extra no debe partirse en
+      // varias sesiones, y nunca se junta con el día calendario siguiente
+      // (aunque el hueco sea corto), que es justo el bug que se corrige aquí.
+      while (j + 1 < n && registrosOrdenados[j + 1].dt.toDateString() === entrada.dt.toDateString()) {
+        j++;
+      }
+    } else {
+      // Nocturna confirmada, o jornada desconocida (respaldo seguro): se
+      // usa el criterio de horas transcurridas desde la entrada, que sí
+      // permite cruzar la medianoche para un turno que empieza de noche.
+      while (j + 1 < n && (registrosOrdenados[j + 1].dt - entrada.dt) / 3600000 <= LIMITE_MAX_HORAS) {
+        j++;
+      }
     }
     sesiones.push({
       entrada: entrada.dt,
@@ -1509,10 +1535,10 @@ function construirRegistrosParaSubir(porColab, camposMapa){
   const c = (displayName) => camposMapa[displayName] || displayName;
   porColab.forEach((registros, idColab) => {
     const ordenados = registros.slice().sort((a,b) => a.dt - b.dt);
-    const sesiones = agruparEnSesiones(ordenados);
+    const catColabInfo = cdCatColab.get(idColab) || { facilitador: '', lider: '', jornada: '', descansos: '' };
+    const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(catColabInfo.jornada));
     sesiones.forEach(sesion => {
       const turnoEfectivo = calcularTurnoEfectivo(sesion.entrada, sesion.salida);
-      const catColabInfo = cdCatColab.get(idColab) || { facilitador: '', lider: '', jornada: '', descansos: '' };
       if (!catColabInfo.facilitador && !catColabInfo.lider && !catColabInfo.jornada) {
         sinMatchCatColab.add(idColab);
       }
@@ -2158,8 +2184,8 @@ document.getElementById('cdHeBtnBuscar').addEventListener('click', async () => {
 
     porColab.forEach((registros, idColab) => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados);
       const catColabInfo = cdCatColab.get(idColab);
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(catColabInfo ? catColabInfo.jornada : ''));
       sesiones.forEach(sesion => {
         // Solo sesiones cuya salida cae dentro del rango pedido (evita
         // recontar/duplicar sesiones que ya se revisaron en un barrido
@@ -2753,7 +2779,7 @@ async function diaBuscar(){
     const filas = [];
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados);
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(ordenados[0] ? ordenados[0].jornada : ''));
       sesiones.forEach(sesion => {
         const entrada = sesion.registros[0];
         const salida = sesion.registros[sesion.registros.length - 1];
@@ -2976,7 +3002,7 @@ async function semBuscar(){
     const filas = [];
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados);
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(ordenados[0] ? ordenados[0].jornada : ''));
 
       // Días de esa semana (0=Lun..6=Dom) con su sesión correspondiente.
       const porDia = new Array(7).fill(null);
@@ -3219,7 +3245,7 @@ async function bioBuscar(){
     const filas = [];
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados);
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(ordenados[0] ? ordenados[0].jornada : ''));
       sesiones.forEach(sesion => {
         const entrada = sesion.registros[0];
         const salida = sesion.registros[sesion.registros.length - 1];
@@ -3406,9 +3432,9 @@ async function cargarCatAccesos(token, ids){
 const ROL_CODIGOS_PERMITIDOS = {
   Facilitador: ['F', 'PSG', 'V', 'D'],
   Lider: ['F', 'PSG', 'V', 'D'],
-  TyC: ['P', 'A', 'R'],
+  TyC: ['P', 'A', 'R', 'RJ'],
   Enfermera: ['I', 'II'],
-  Admin: ['F', 'A', 'PSG', 'P', 'I', 'II', 'V', 'D', 'R'],
+  Admin: ['F', 'A', 'PSG', 'P', 'I', 'II', 'V', 'D', 'R', 'RJ'],
 };
 
 // Retardo (R): se detecta cuando la entrada real pasa más de 10 minutos del
@@ -3609,7 +3635,7 @@ async function incBuscar(){
     const filas = [];
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados);
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(ordenados[0] ? ordenados[0].jornada : ''));
 
       const porDiaSesion = new Array(7).fill(null);
       sesiones.forEach(sesion => {
