@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v91]</title>
+<title>Biométricos Colaboradores | Ubictum [v92]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v91</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v92</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1457,7 +1457,7 @@ function agruparEnSesiones(registrosOrdenados, esNocturno){
       // entre checadas — un día largo con horas extra no debe partirse en
       // varias sesiones, y nunca se junta con el día calendario siguiente
       // (aunque el hueco sea corto), que es justo el bug que se corrige aquí.
-      while (j + 1 < n && registrosOrdenados[j + 1].dt.toDateString() === entrada.dt.toDateString()) {
+      while (j + 1 < n && registrosOrdenados[j + 1].dt.toISOString().slice(0, 10) === entrada.dt.toISOString().slice(0, 10)) {
         j++;
       }
     } else {
@@ -3017,19 +3017,6 @@ async function semBuscar(){
     porColab.forEach(registros => {
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
       const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(ordenados[0] ? ordenados[0].idColab : '', ordenados[0] ? ordenados[0].jornada : '')));
-      // DIAGNÓSTICO TEMPORAL — quitar cuando se resuelva el tema de sesiones.
-      // Ábrelo con F12 → pestaña "Console" en el navegador.
-      const idColabDbg = ordenados[0] ? ordenados[0].idColab : '?';
-      const catColabInfoDbg = cdCatColab ? cdCatColab.get(idColabDbg) : null;
-      console.log('[DEBUG sesiones]', idColabDbg, {
-        cdCatColabCargado: !!cdCatColab,
-        cdCatColabTamano: cdCatColab ? cdCatColab.size : 0,
-        jornadaSnapshotDelPrimerRegistro: ordenados[0] ? ordenados[0].jornada : '',
-        jornadaEnCatColab: catColabInfoDbg ? catColabInfoDbg.jornada : '(SIN match en cdCatColab)',
-        jornadaUsadaFinal: jornadaVigenteODeSnapshot(idColabDbg, ordenados[0] ? ordenados[0].jornada : ''),
-        esNocturnoCalculado: esJornadaNocturna(jornadaVigenteODeSnapshot(idColabDbg, ordenados[0] ? ordenados[0].jornada : '')),
-        sesionesResultantes: sesiones.map(s => ({ entrada: s.entrada.toISOString(), salida: s.salida.toISOString(), nRegistros: s.registros.length })),
-      });
 
       // Días de esa semana (0=Lun..6=Dom) con su sesión correspondiente.
       const porDia = new Array(7).fill(null);
