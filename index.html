@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v82]</title>
+<title>Biométricos Colaboradores | Ubictum [v83]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v82</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v83</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2268,13 +2268,31 @@ document.getElementById('cdReabrirBtnBuscar').addEventListener('click', async ()
     const ic = (n) => camposMapa[n] || n;
 
     cdReabrirLog(`Buscando registros de la semana ${lunesStr} a ${domingoStr}${idColabFiltro ? ` para el colaborador ${idColabFiltro}` : ' (todos)'}…`);
-    const filtro = encodeURIComponent(`fields/${ic('Fecha')} ge '${lunesStr}T00:00:00Z' and fields/${ic('Fecha')} le '${domingoStr}T23:59:59Z'`);
+    // Margen de 1 día de cada lado (mismo criterio que el resto de la app para
+    // RegIncidencias): los registros se guardan a mediodía UTC y el sitio
+    // reinterpreta la comparación de fechas con su propio desfase de zona
+    // horaria — sin este margen, quedan fuera registros que sí están en la
+    // semana buscada.
+    const unDiaMs = 24 * 60 * 60 * 1000;
+    const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
+    const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
+    const filtro = encodeURIComponent(`fields/${ic('Fecha')} ge '${desdeAmpliado}' and fields/${ic('Fecha')} le '${hastaAmpliado}'`);
     const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items` +
-      `?expand=fields(select=${ic('IDColab')},${ic('Cerrado')})` +
+      `?expand=fields(select=${ic('IDColab')},${ic('Cerrado')},${ic('Fecha')})` +
       `&$filter=${filtro}&$top=5000`;
     const items = await graphFetchAll(url, token);
+    cdReabrirLog(`(${items.length} registro(s) en ese rango ampliado, antes de filtrar por fecha exacta y estatus Cerrado)`);
 
-    const cerrados = items.filter(it => {
+    // Filtro fino por fecha exacta (el rango de arriba trae 1 día extra de
+    // margen de cada lado a propósito, aquí se recorta a la semana real).
+    const itemsEnSemana = items.filter(it => {
+      const fechaRaw = it.fields[ic('Fecha')];
+      if (!fechaRaw) return false;
+      const fecha = new Date(fechaRaw).toISOString().slice(0, 10);
+      return fecha >= lunesStr && fecha <= domingoStr;
+    });
+
+    const cerrados = itemsEnSemana.filter(it => {
       const f = it.fields;
       const cerradoTxt = String(f[ic('Cerrado')] || '').trim().toLowerCase();
       const esCerrado = cerradoTxt === 'sí' || cerradoTxt === 'si';
