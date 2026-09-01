@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v92]</title>
+<title>Biométricos Colaboradores | Ubictum [v94]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v92</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v94</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1451,20 +1451,22 @@ function agruparEnSesiones(registrosOrdenados, esNocturno){
   while (i < n) {
     const entrada = registrosOrdenados[i];
     let j = i;
-    if (esNocturno === false) {
-      // Jornada diurna confirmada: se agrupa TODO lo que caiga en el mismo
-      // día calendario que la entrada, sin importar cuántas horas pasen
-      // entre checadas — un día largo con horas extra no debe partirse en
-      // varias sesiones, y nunca se junta con el día calendario siguiente
-      // (aunque el hueco sea corto), que es justo el bug que se corrige aquí.
-      while (j + 1 < n && registrosOrdenados[j + 1].dt.toISOString().slice(0, 10) === entrada.dt.toISOString().slice(0, 10)) {
+    if (esNocturno === true) {
+      // Nocturna confirmada: se usa el criterio de horas transcurridas desde
+      // la entrada, que sí permite cruzar la medianoche para un turno que
+      // empieza de noche.
+      while (j + 1 < n && (registrosOrdenados[j + 1].dt - entrada.dt) / 3600000 <= LIMITE_MAX_HORAS) {
         j++;
       }
     } else {
-      // Nocturna confirmada, o jornada desconocida (respaldo seguro): se
-      // usa el criterio de horas transcurridas desde la entrada, que sí
-      // permite cruzar la medianoche para un turno que empieza de noche.
-      while (j + 1 < n && (registrosOrdenados[j + 1].dt - entrada.dt) / 3600000 <= LIMITE_MAX_HORAS) {
+      // Diurna confirmada, O JORNADA DESCONOCIDA: se agrupa TODO lo que caiga
+      // en el mismo día calendario que la entrada, sin importar cuántas horas
+      // pasen entre checadas, y nunca se junta con el día siguiente. Cuando no
+      // se sabe si es diurna o nocturna, este es el respaldo más seguro: la
+      // mayoría de los colaboradores son diurnos, y si alguien nocturno cae
+      // aquí por desconocerse su Jornada, el error se nota fácil (turno
+      // partido en dos) en vez de mezclar en silencio los datos de dos días.
+      while (j + 1 < n && registrosOrdenados[j + 1].dt.toISOString().slice(0, 10) === entrada.dt.toISOString().slice(0, 10)) {
         j++;
       }
     }
@@ -2907,6 +2909,14 @@ const DIAS_SEMANA = ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'];
 // El comedor no es punto de acceso de entrada ni salida: si un checado (Entrada
 // o Salida) proviene de Door_Panorama Comedor, se muestra "—" en vez de su hora
 // (el checado SIGUE contando para armar la sesión, solo no se enseña esa hora).
+// Un checado en la puerta del comedor no cuenta como entrada/salida real de
+// jornada (la persona ya checó su entrada real en otra puerta antes de ir a
+// comer) — se usa tanto para ocultar la hora en pantalla (horaOGuion) como
+// para NO disparar Retardo a partir de ese checado.
+function esCheckadaReal(registroChecada){
+  return !!(registroChecada && registroChecada.biometrico !== 'Door_Panorama Comedor');
+}
+
 function horaOGuion(registroChecada){
   if (!registroChecada) return '—';
   if (registroChecada.biometrico === 'Door_Panorama Comedor') return '—';
@@ -3037,7 +3047,7 @@ async function semBuscar(){
             : `<span class="sem-hora-doble"><span>${horaOGuion(entrada)}</span><span>—</span></span>`,
           entrada,
           horaExtra: hayRealSalida ? (salida.horaExtra ?? entrada.horaExtra ?? null) : null,
-          retardo: esRetardo(entrada.hora, entrada.jornada),
+          retardo: esCheckadaReal(entrada) && esRetardo(entrada.hora, entrada.jornada),
         };
       });
 
@@ -3832,7 +3842,7 @@ function incRenderTabla(){
       // el inicio de Jornada, sin importar qué código quede seleccionado en
       // el combo. El amarillo queda pegado al registro aunque el líder
       // cambie R por PSG u otra cosa después.
-      const esRetardoHoy = !!(d.sesionReal && esRetardo(d.sesionReal.entrada.hora, d.sesionReal.entrada.jornada));
+      const esRetardoHoy = !!(d.sesionReal && esCheckadaReal(d.sesionReal.entrada) && esRetardo(d.sesionReal.entrada.hora, d.sesionReal.entrada.jornada));
       const estiloRetardo = esRetardoHoy ? ' style="background:#fff3b0;"' : '';
 
       // Texto/hora de referencia para mostrar cuando hay checada real de fondo
