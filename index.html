@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v78]</title>
+<title>Biométricos Colaboradores | Ubictum [v79]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v78</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v79</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1126,6 +1126,7 @@ let cdGraphIds = null;     // { siteId, listIds: { registros, catColab, catTurno
 let cdCatTurnos = null;    // array de filas de CatTurnos (parseadas a minutos)
 let cdCamposRegistros = null; // mapa displayName -> nombre interno real, para RegBio26
 let cdCatColab = null;     // Map IDColab -> { facilitador, lider }
+let cdLiderPorNombre = null; // Map Nombre (de cualquier persona en CatColab) -> su propio Lider — para resolver el árbol Líder→Facilitador→Colaborador
 
 function cdLog(msg){
   const el = document.getElementById('cdLog');
@@ -1298,9 +1299,14 @@ async function cargarCatalogos(token, ids){
     `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items?expand=fields&$top=500`, token
   );
   cdCatColab = new Map();
+  cdLiderPorNombre = new Map();
   colabRaw.forEach(it => {
     const f = it.fields;
     const idColab = f[cc('IDColab')];
+    const nombrePropio = f[cc('Nombre')];
+    if (nombrePropio) {
+      cdLiderPorNombre.set(String(nombrePropio).trim(), f[cc('Lider')] || '');
+    }
     if (idColab) {
       cdCatColab.set(String(idColab).trim(), {
         facilitador: f[cc('Facilitador')] || '',
@@ -3357,9 +3363,21 @@ async function incBuscar(){
       const estatus = cerrado ? 'cerrada' : (infoGuardado ? 'guardado' : 'sinGuardar');
 
       // "Lo mío": Facilitador/Líder sin ningún rol elevado solo ven a sus
-      // propios colaboradores. TyC, Enfermera y Admin ven a todos.
+      // propios colaboradores — Y a los colaboradores de SUS facilitadores
+      // (árbol Líder → Facilitador → Colaborador). El segundo salto se
+      // resuelve buscando, en CatColab, cuál es el Líder propio del
+      // Facilitador de este colaborador (no basta con el campo Lider del
+      // colaborador mismo, que en la práctica suele traer solo su jefe
+      // directo — el Facilitador — y no al líder de arriba).
       if (usuario.esOperaciones && !usuario.esElevado) {
-        const esSuyo = usuario.nombre && (primerConDatos.facilitador === usuario.nombre || primerConDatos.lider === usuario.nombre);
+        const liderDeSuFacilitador = (cdLiderPorNombre && primerConDatos.facilitador)
+          ? cdLiderPorNombre.get(String(primerConDatos.facilitador).trim())
+          : '';
+        const esSuyo = usuario.nombre && (
+          primerConDatos.facilitador === usuario.nombre ||
+          primerConDatos.lider === usuario.nombre ||
+          liderDeSuFacilitador === usuario.nombre
+        );
         if (!esSuyo) return;
       }
 
