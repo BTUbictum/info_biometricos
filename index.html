@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v85]</title>
+<title>Biométricos Colaboradores | Ubictum [v86]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v85</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v86</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -740,17 +740,18 @@
   <div class="card" style="margin-top:28px;">
     <h2 style="font-size:16px; margin-bottom:4px;">Reabrir Semana (Registro Incidencias)</h2>
     <p style="font-size:13px; color:var(--gris,#636469); margin-bottom:14px; max-width:720px;">
-      Quita el bloqueo de "Semana Cerrada" en RegIncidencias para que Facilitador/Líder puedan volver a editar. Pon el
-      ID de un colaborador para reabrirle solo a él esa semana, o déjalo en blanco para reabrir a TODOS los que
-      tengan esa semana cerrada. No toca los códigos ya guardados (F/A/PSG/etc.), solo quita el candado de cierre.
+      Quita el bloqueo de "Semana Cerrada" en RegIncidencias para que Facilitador/Líder puedan volver a editar.
+      Las fechas son opcionales: déjalas vacías para que el buscador te muestre qué está cerrado y en qué fechas
+      exactas, sin que tengas que saberlo de antemano. Pon el ID de un colaborador para acotar a una sola persona,
+      o déjalo en blanco para ver a todos. No toca los códigos ya guardados (F/A/PSG/etc.), solo quita el candado.
     </p>
     <div class="reg-filtros">
       <div class="reg-campo">
-        <label>Fecha desde</label>
+        <label>Fecha desde (opcional)</label>
         <input type="date" id="cdReabrirFechaDesde">
       </div>
       <div class="reg-campo">
-        <label>Fecha hasta</label>
+        <label>Fecha hasta (opcional)</label>
         <input type="date" id="cdReabrirFechaHasta">
       </div>
       <div class="reg-campo">
@@ -765,6 +766,7 @@
       <div class="cd-box"><div class="n" id="cdReabrirRegistros">0</div><div class="l">Registros de día a reabrir</div></div>
       <div class="cd-box"><div class="n" id="cdReabrirActualizados">0</div><div class="l">Reabiertos</div></div>
     </div>
+    <div id="cdReabrirLista" style="margin-top:14px;"></div>
     <button class="cd-btn hidden" id="cdReabrirBtnConfirmar" type="button" style="margin-top:10px;">Reabrir Semana</button>
     <div class="cd-log" id="cdReabrirLog" style="margin-top:14px;"></div>
   </div>
@@ -2251,76 +2253,110 @@ function cdReabrirLog(msg){
 let cdReabrirPendientes = []; // [{ itemId }]
 
 document.getElementById('cdReabrirBtnBuscar').addEventListener('click', async () => {
-  const lunesStr = document.getElementById('cdReabrirFechaDesde').value;
-  const domingoStr = document.getElementById('cdReabrirFechaHasta').value;
-  if (!lunesStr || !domingoStr) { await incAvisar('Selecciona Fecha desde y Fecha hasta.'); return; }
+  const lunesStr = document.getElementById('cdReabrirFechaDesde').value; // puede venir vacío
+  const domingoStr = document.getElementById('cdReabrirFechaHasta').value; // puede venir vacío
   const idColabFiltro = document.getElementById('cdReabrirIdColab').value.trim();
+  if (!lunesStr && !domingoStr && !idColabFiltro) {
+    const ok = await incConfirmar('No pusiste fechas ni ID de colaborador — esto va a revisar TODA la lista de RegIncidencias buscando semanas cerradas. Puede tardar unos segundos. ¿Continuar?');
+    if (!ok) return;
+  }
 
   const btn = document.getElementById('cdReabrirBtnBuscar');
   btn.disabled = true;
   document.getElementById('cdReabrirLog').textContent = '';
+  document.getElementById('cdReabrirLista').innerHTML = '';
   document.getElementById('cdReabrirResumen').classList.add('hidden');
   document.getElementById('cdReabrirBtnConfirmar').classList.add('hidden');
   try {
-    const lunes = new Date(lunesStr + 'T00:00:00Z');
-    const domingo = new Date(domingoStr + 'T00:00:00Z');
-
     const token = await obtenerTokenGraph();
     const ids = await resolverGraphIds(token);
     const camposMapa = await resolverCamposRegIncidencias(token, ids);
     const ic = (n) => camposMapa[n] || n;
 
-    cdReabrirLog(`Buscando registros de la semana ${lunesStr} a ${domingoStr}${idColabFiltro ? ` para el colaborador ${idColabFiltro}` : ' (todos)'}…`);
-    // Margen de 1 día de cada lado (mismo criterio que el resto de la app para
-    // RegIncidencias): los registros se guardan a mediodía UTC y el sitio
-    // reinterpreta la comparación de fechas con su propio desfase de zona
-    // horaria — sin este margen, quedan fuera registros que sí están en la
-    // semana buscada.
-    const unDiaMs = 24 * 60 * 60 * 1000;
-    const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
-    const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
-    const filtro = encodeURIComponent(`fields/${ic('Fecha')} ge '${desdeAmpliado}' and fields/${ic('Fecha')} le '${hastaAmpliado}'`);
-    const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items` +
-      `?expand=fields(select=${ic('IDColab')},${ic('Cerrado')},${ic('Fecha')})` +
-      `&$filter=${filtro}&$top=5000`;
-    const items = await graphFetchAll(url, token);
-    cdReabrirLog(`(${items.length} registro(s) en ese rango ampliado, antes de filtrar por fecha exacta y estatus Cerrado)`);
-    if (items.length) {
-      cdReabrirLog('DIAGNÓSTICO — primer registro crudo tal como llega de Graph: ' + JSON.stringify(items[0].fields));
-      cdReabrirLog(`DIAGNÓSTICO — nombres internos que estoy usando: Fecha="${ic('Fecha')}", Cerrado="${ic('Cerrado')}", IDColab="${ic('IDColab')}"`);
+    // Filtro server-side: por IDColab si se dio, y por rango de fecha (con
+    // margen de 1 día de cada lado, mismo criterio que el resto de la app
+    // para RegIncidencias) si se dieron ambas fechas. Si no se da nada, se
+    // trae toda la lista y se descubre qué está cerrado y en qué fechas.
+    const condiciones = [];
+    if (idColabFiltro) condiciones.push(`fields/${ic('IDColab')} eq '${idColabFiltro}'`);
+    let lunes = null, domingo = null;
+    if (lunesStr && domingoStr) {
+      lunes = new Date(lunesStr + 'T00:00:00Z');
+      domingo = new Date(domingoStr + 'T00:00:00Z');
+      const unDiaMs = 24 * 60 * 60 * 1000;
+      const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
+      const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
+      condiciones.push(`fields/${ic('Fecha')} ge '${desdeAmpliado}' and fields/${ic('Fecha')} le '${hastaAmpliado}'`);
     }
+    const filtroParte = condiciones.length ? `&$filter=${encodeURIComponent(condiciones.join(' and '))}` : '';
 
-    // Filtro fino por fecha exacta (el rango de arriba trae 1 día extra de
-    // margen de cada lado a propósito, aquí se recorta a la semana real).
-    const itemsEnSemana = items.filter(it => {
+    cdReabrirLog(`Buscando${idColabFiltro ? ` para el colaborador ${idColabFiltro}` : ' en todos los colaboradores'}` +
+      `${lunesStr && domingoStr ? ` entre ${lunesStr} y ${domingoStr}` : ' (sin acotar fecha — se va a descubrir)'}…`);
+    const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.regIncidencias}/items` +
+      `?expand=fields(select=${ic('IDColab')},${ic('Nombre')},${ic('Cerrado')},${ic('Fecha')})` +
+      `${filtroParte}&$top=5000`;
+    const items = await graphFetchAll(url, token);
+    cdReabrirLog(`${items.length} registro(s) revisados.`);
+
+    // Si se dio un rango de fecha, se recorta al rango exacto (arriba se
+    // amplió 1 día de margen a propósito). Si no se dio rango, se toman
+    // todos los que trajo la consulta.
+    const itemsCandidatos = (lunes && domingo) ? items.filter(it => {
       const fechaRaw = it.fields[ic('Fecha')];
       if (!fechaRaw) return false;
       const fecha = new Date(fechaRaw).toISOString().slice(0, 10);
       return fecha >= lunesStr && fecha <= domingoStr;
-    });
-    cdReabrirLog(`${itemsEnSemana.length} registro(s) quedaron dentro de la semana exacta (${lunesStr} a ${domingoStr}).`);
+    }) : items;
 
-    const cerrados = itemsEnSemana.filter(it => {
+    const cerrados = itemsCandidatos.filter(it => {
+      const cerradoTxt = String(it.fields[ic('Cerrado')] || '').trim().toLowerCase();
+      return cerradoTxt === 'sí' || cerradoTxt === 'si';
+    });
+
+    // Agrupa por colaborador: nombre, fecha mínima/máxima encontrada, y
+    // cuántos renglones — así se ve de un vistazo qué semana(s) están
+    // cerradas, sin tener que adivinar las fechas de antemano.
+    const porColab = new Map();
+    cerrados.forEach(it => {
       const f = it.fields;
-      const cerradoTxt = String(f[ic('Cerrado')] || '').trim().toLowerCase();
-      const esCerrado = cerradoTxt === 'sí' || cerradoTxt === 'si';
       const idColab = String(f[ic('IDColab')] || '').trim();
-      if (!esCerrado) return false;
-      if (idColabFiltro && idColab !== idColabFiltro) return false;
-      return true;
+      const fecha = f[ic('Fecha')] ? new Date(f[ic('Fecha')]).toISOString().slice(0, 10) : '';
+      if (!porColab.has(idColab)) {
+        porColab.set(idColab, { idColab, nombre: f[ic('Nombre')] || '', fechaMin: fecha, fechaMax: fecha, itemIds: [] });
+      }
+      const g = porColab.get(idColab);
+      if (fecha && fecha < g.fechaMin) g.fechaMin = fecha;
+      if (fecha && fecha > g.fechaMax) g.fechaMax = fecha;
+      g.itemIds.push(it.id);
     });
 
-    const idsColabUnicos = new Set(cerrados.map(it => String(it.fields[ic('IDColab')] || '').trim()));
     cdReabrirPendientes = cerrados.map(it => ({ itemId: it.id }));
 
     document.getElementById('cdReabrirResumen').classList.remove('hidden');
-    document.getElementById('cdReabrirColabs').textContent = idsColabUnicos.size;
+    document.getElementById('cdReabrirColabs').textContent = porColab.size;
     document.getElementById('cdReabrirRegistros').textContent = cerrados.length;
     document.getElementById('cdReabrirActualizados').textContent = '0';
 
-    cdReabrirLog(`${idsColabUnicos.size} colaborador(es) con esa semana cerrada, ${cerrados.length} registro(s) de día a reabrir.`);
+    // Tabla con lo encontrado, para ver las fechas reales sin adivinar.
+    if (porColab.size) {
+      const filas = [...porColab.values()].map(g =>
+        `<tr><td style="padding:6px 10px;">${g.idColab}</td><td style="padding:6px 10px;">${g.nombre}</td>` +
+        `<td style="padding:6px 10px;">${g.fechaMin}${g.fechaMin !== g.fechaMax ? ' a ' + g.fechaMax : ''}</td>` +
+        `<td style="padding:6px 10px;">${g.itemIds.length}</td></tr>`
+      ).join('');
+      document.getElementById('cdReabrirLista').innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th style="padding:6px 10px;">ID</th><th style="padding:6px 10px;">Nombre</th>
+            <th style="padding:6px 10px;">Fecha(s) cerrada(s)</th><th style="padding:6px 10px;">Días</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table></div>`;
+    }
+
+    cdReabrirLog(`${porColab.size} colaborador(es) con semana(s) cerrada(s), ${cerrados.length} registro(s) de día a reabrir.`);
     if (cerrados.length) document.getElementById('cdReabrirBtnConfirmar').classList.remove('hidden');
-    else cdReabrirLog('No hay nada que reabrir con esos filtros.');
+    else cdReabrirLog('No hay nada cerrado con esos filtros.');
   } catch (err) {
     console.error(err);
     cdReabrirLog('ERROR: ' + err.message);
