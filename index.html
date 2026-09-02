@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v95]</title>
+<title>Biométricos Colaboradores | Ubictum [v96]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v95</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v96</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -2662,14 +2662,14 @@ document.getElementById('cdCatColabBtnComparar').addEventListener('click', async
       html += `</tbody></table></div>`;
     }
     if (nuevos.length) {
-      html += `<p style="font-weight:600; margin:14px 0 6px;">Nuevos — no existen aún en CatColab (destildados por default, revisa antes de crear):
+      html += `<p style="font-weight:600; margin:14px 0 6px;">Nuevos — no existen aún en CatColab (marcados por default, destilda si NO quieres crear alguno):
         <a href="#" id="cdCatColabNuevosTodos" style="margin-left:8px;">Marcar todos</a> ·
         <a href="#" id="cdCatColabNuevosNinguno" style="margin-left:4px;">Desmarcar todos</a></p>
         <div class="table-wrap"><table><thead><tr>
           <th></th><th style="padding:6px 10px;">ID</th><th style="padding:6px 10px;">Nombre</th>
         </tr></thead><tbody>`;
       nuevos.forEach((g, i) => {
-        html += `<tr><td style="padding:6px 10px;"><input type="checkbox" class="cd-catcolab-check-nuevo" data-idx="${i}"></td>
+        html += `<tr><td style="padding:6px 10px;"><input type="checkbox" class="cd-catcolab-check-nuevo" data-idx="${i}" checked></td>
           <td style="padding:6px 10px;">${g.idColab}</td><td style="padding:6px 10px;">${g.fila.Nombre || ''}</td></tr>`;
       });
       html += `</tbody></table></div>`;
