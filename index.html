@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v96]</title>
+<title>Biométricos Colaboradores | Ubictum [v97]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v96</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v97</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -784,7 +784,10 @@
       no traes "Puesto", por ejemplo, ese campo no se toca. Compara contra CatColab vigente y te muestra qué
       cambiaría antes de aplicar nada.
     </p>
-    <input type="file" id="cdCatColabArchivo" accept=".xlsx,.xls">
+    <input type="file" id="cdCatColabArchivo" accept=".xlsx,.xls" class="hidden">
+    <button class="cd-btn" id="cdCatColabBtnElegirArchivo" type="button">Elegir archivo Excel</button>
+    <span id="cdCatColabNombreArchivo" style="margin-left:10px; font-size:13px; color:var(--gris,#636469);">Ningún archivo seleccionado</span>
+    <br>
     <button class="cd-btn" id="cdCatColabBtnComparar" type="button" style="margin-top:10px;">Comparar con CatColab</button>
 
     <div id="cdCatColabResumen" class="cd-summary hidden" style="margin-top:14px; grid-template-columns:repeat(3,1fr);">
@@ -2541,9 +2544,12 @@ function cdCatColabLog(msg){
 let cdCatColabExcelFilas = [];
 let cdCatColabGrupos = { cambios: [], nuevos: [], mapaCampos: {} };
 
+document.getElementById('cdCatColabBtnElegirArchivo').addEventListener('click', () => document.getElementById('cdCatColabArchivo').click());
+
 document.getElementById('cdCatColabArchivo').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  document.getElementById('cdCatColabNombreArchivo').textContent = file.name;
   document.getElementById('cdCatColabLog').textContent = '';
   document.getElementById('cdCatColabLista').innerHTML = '';
   document.getElementById('cdCatColabResumen').classList.add('hidden');
