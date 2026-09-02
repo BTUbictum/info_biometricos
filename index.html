@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v94]</title>
+<title>Biométricos Colaboradores | Ubictum [v95]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v94</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v95</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -773,6 +773,28 @@
     <div id="cdReabrirLista" style="margin-top:14px;"></div>
     <button class="cd-btn hidden" id="cdReabrirBtnConfirmar" type="button" style="margin-top:10px;">Reabrir seleccionados</button>
     <div class="cd-log" id="cdReabrirLog" style="margin-top:14px;"></div>
+  </div>
+
+  <div class="card" style="margin-top:28px;">
+    <h2 style="font-size:16px; margin-bottom:4px;">Actualizar CatColab desde Excel</h2>
+    <p style="font-size:13px; color:var(--gris,#636469); margin-bottom:14px; max-width:720px;">
+      Sube un Excel con columnas tipo CatColab — <b>IDColab</b> es obligatoria; además puede traer cualquiera de:
+      Nombre, TurnoAsignado, Facilitador, Lider, Puesto, Jornada, Descansos, Estatus (los nombres de columna deben
+      coincidir, sin importar mayúsculas/espacios). Solo se comparan las columnas que sí vengan en tu archivo — si
+      no traes "Puesto", por ejemplo, ese campo no se toca. Compara contra CatColab vigente y te muestra qué
+      cambiaría antes de aplicar nada.
+    </p>
+    <input type="file" id="cdCatColabArchivo" accept=".xlsx,.xls">
+    <button class="cd-btn" id="cdCatColabBtnComparar" type="button" style="margin-top:10px;">Comparar con CatColab</button>
+
+    <div id="cdCatColabResumen" class="cd-summary hidden" style="margin-top:14px; grid-template-columns:repeat(3,1fr);">
+      <div class="cd-box"><div class="n" id="cdCatColabCambios">0</div><div class="l">Con cambios</div></div>
+      <div class="cd-box"><div class="n" id="cdCatColabNuevos">0</div><div class="l">Nuevos (no existen aún)</div></div>
+      <div class="cd-box"><div class="n" id="cdCatColabActualizados">0</div><div class="l">Aplicados</div></div>
+    </div>
+    <div id="cdCatColabLista" style="margin-top:14px;"></div>
+    <button class="cd-btn hidden" id="cdCatColabBtnAplicar" type="button" style="margin-top:10px;">Aplicar seleccionados</button>
+    <div class="cd-log" id="cdCatColabLog" style="margin-top:14px;"></div>
   </div>
 
   </div><!-- /cdContenido -->
@@ -2495,6 +2517,244 @@ document.getElementById('cdReabrirBtnConfirmar').addEventListener('click', async
   } catch (err) {
     console.error(err);
     cdReabrirLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+
+/* ============================================================
+ * ACTUALIZAR CATCOLAB DESDE EXCEL
+ * ------------------------------------------------------------
+ * Lee un Excel subido por el usuario (columnas tipo CatColab),
+ * lo compara campo por campo contra CatColab vigente por IDColab,
+ * y deja elegir qué cambios aplicar y qué colaboradores nuevos
+ * crear — nunca se aplica nada sin que el usuario lo confirme.
+ * ============================================================ */
+const CAMPOS_CATCOLAB = ['IDColab', 'Nombre', 'TurnoAsignado', 'Facilitador', 'Lider', 'Puesto', 'Jornada', 'Descansos', 'Estatus'];
+
+function cdCatColabLog(msg){
+  const el = document.getElementById('cdCatColabLog');
+  el.textContent += (el.textContent ? '\n' : '') + msg;
+}
+
+let cdCatColabExcelFilas = [];
+let cdCatColabGrupos = { cambios: [], nuevos: [], mapaCampos: {} };
+
+document.getElementById('cdCatColabArchivo').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('cdCatColabLog').textContent = '';
+  document.getElementById('cdCatColabLista').innerHTML = '';
+  document.getElementById('cdCatColabResumen').classList.add('hidden');
+  document.getElementById('cdCatColabBtnAplicar').classList.add('hidden');
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      // raw:false para que traiga el texto tal como se ve en la celda (evita
+      // que un IDColab con ceros a la izquierda, ej. "02009243", se convierta
+      // en número y pierda el cero).
+      const filas = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' });
+      cdCatColabExcelFilas = filas;
+      cdCatColabLog(`Archivo leído: ${filas.length} fila(s) en "${wb.SheetNames[0]}".`);
+    } catch (err) {
+      cdCatColabLog('ERROR leyendo el archivo: ' + err.message);
+      cdCatColabExcelFilas = [];
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+document.getElementById('cdCatColabBtnComparar').addEventListener('click', async () => {
+  if (!cdCatColabExcelFilas.length) { await incAvisar('Primero selecciona un archivo Excel.'); return; }
+
+  const btn = document.getElementById('cdCatColabBtnComparar');
+  btn.disabled = true;
+  document.getElementById('cdCatColabLog').textContent = '';
+  document.getElementById('cdCatColabLista').innerHTML = '';
+  document.getElementById('cdCatColabResumen').classList.add('hidden');
+  document.getElementById('cdCatColabBtnAplicar').classList.add('hidden');
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+
+    cdCatColabLog('Resolviendo columnas de CatColab…');
+    const colsRaw = await graphFetchAll(`${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catColab}/columns?$select=name,displayName`, token);
+    const mapaCampos = {};
+    colsRaw.forEach(c => { mapaCampos[c.displayName] = c.name; });
+    const cc = (n) => mapaCampos[n] || n;
+
+    cdCatColabLog('Descargando CatColab vigente…');
+    const selectCampos = CAMPOS_CATCOLAB.map(cc).join(',');
+    const itemsActuales = await graphFetchAll(
+      `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items?expand=fields(select=${selectCampos})&$top=5000`, token
+    );
+    const actualesPorId = new Map();
+    itemsActuales.forEach(it => {
+      const idColab = String(it.fields[cc('IDColab')] || '').trim();
+      if (idColab) actualesPorId.set(idColab, { itemId: it.id, fields: it.fields });
+    });
+    cdCatColabLog(`${actualesPorId.size} colaborador(es) vigentes en CatColab.`);
+
+    // Normaliza encabezados del excel contra los nombres conocidos de
+    // CatColab (sin importar mayúsculas/espacios de más).
+    const filasNorm = cdCatColabExcelFilas.map(fila => {
+      const norm = {};
+      Object.keys(fila).forEach(k => {
+        const kTrim = k.trim();
+        const match = CAMPOS_CATCOLAB.find(c => c.toLowerCase() === kTrim.toLowerCase());
+        if (match) norm[match] = String(fila[k] ?? '').trim();
+      });
+      return norm;
+    });
+
+    const conIdColab = filasNorm.filter(f => f.IDColab);
+    const sinIdColab = filasNorm.length - conIdColab.length;
+    if (!conIdColab.length) {
+      cdCatColabLog('No se encontró ninguna columna "IDColab" reconocible en el archivo — revisa el encabezado.');
+      return;
+    }
+
+    const cambios = [];
+    const nuevos = [];
+
+    conIdColab.forEach(fila => {
+      const idColab = fila.IDColab;
+      const actual = actualesPorId.get(idColab);
+      if (!actual) {
+        nuevos.push({ idColab, fila });
+        return;
+      }
+      const diffs = [];
+      CAMPOS_CATCOLAB.forEach(campo => {
+        if (campo === 'IDColab') return;
+        if (!(campo in fila)) return; // el excel no trae esa columna, no se toca
+        const valorNuevo = fila[campo];
+        const valorActual = String(actual.fields[cc(campo)] || '').trim();
+        if (valorNuevo !== valorActual) diffs.push({ campo, actual: valorActual, nuevo: valorNuevo });
+      });
+      if (diffs.length) cambios.push({ idColab, nombre: actual.fields[cc('Nombre')] || fila.Nombre || '', itemId: actual.itemId, diffs });
+    });
+
+    cdCatColabGrupos = { cambios, nuevos, mapaCampos };
+
+    document.getElementById('cdCatColabResumen').classList.remove('hidden');
+    document.getElementById('cdCatColabCambios').textContent = cambios.length;
+    document.getElementById('cdCatColabNuevos').textContent = nuevos.length;
+    document.getElementById('cdCatColabActualizados').textContent = '0';
+
+    let html = '';
+    if (cambios.length) {
+      html += `<p style="font-weight:600; margin-bottom:6px;">Con cambios (destilda los que NO quieras aplicar):
+        <a href="#" id="cdCatColabCambiosTodos" style="margin-left:8px;">Marcar todos</a> ·
+        <a href="#" id="cdCatColabCambiosNinguno" style="margin-left:4px;">Desmarcar todos</a></p>
+        <div class="table-wrap"><table><thead><tr>
+          <th></th><th style="padding:6px 10px;">ID</th><th style="padding:6px 10px;">Nombre</th><th style="padding:6px 10px;">Cambios</th>
+        </tr></thead><tbody>`;
+      cambios.forEach((g, i) => {
+        const detalle = g.diffs.map(d => `<b>${d.campo}</b>: "${d.actual}" → "${d.nuevo}"`).join('<br>');
+        html += `<tr><td style="padding:6px 10px;"><input type="checkbox" class="cd-catcolab-check-cambio" data-idx="${i}" checked></td>
+          <td style="padding:6px 10px;">${g.idColab}</td><td style="padding:6px 10px;">${g.nombre}</td>
+          <td style="padding:6px 10px; font-size:12px;">${detalle}</td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+    }
+    if (nuevos.length) {
+      html += `<p style="font-weight:600; margin:14px 0 6px;">Nuevos — no existen aún en CatColab (destildados por default, revisa antes de crear):
+        <a href="#" id="cdCatColabNuevosTodos" style="margin-left:8px;">Marcar todos</a> ·
+        <a href="#" id="cdCatColabNuevosNinguno" style="margin-left:4px;">Desmarcar todos</a></p>
+        <div class="table-wrap"><table><thead><tr>
+          <th></th><th style="padding:6px 10px;">ID</th><th style="padding:6px 10px;">Nombre</th>
+        </tr></thead><tbody>`;
+      nuevos.forEach((g, i) => {
+        html += `<tr><td style="padding:6px 10px;"><input type="checkbox" class="cd-catcolab-check-nuevo" data-idx="${i}"></td>
+          <td style="padding:6px 10px;">${g.idColab}</td><td style="padding:6px 10px;">${g.fila.Nombre || ''}</td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+    }
+    document.getElementById('cdCatColabLista').innerHTML = html;
+
+    if (cambios.length) {
+      document.getElementById('cdCatColabCambiosTodos').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.cd-catcolab-check-cambio').forEach(cb => cb.checked = true); });
+      document.getElementById('cdCatColabCambiosNinguno').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.cd-catcolab-check-cambio').forEach(cb => cb.checked = false); });
+    }
+    if (nuevos.length) {
+      document.getElementById('cdCatColabNuevosTodos').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.cd-catcolab-check-nuevo').forEach(cb => cb.checked = true); });
+      document.getElementById('cdCatColabNuevosNinguno').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.cd-catcolab-check-nuevo').forEach(cb => cb.checked = false); });
+    }
+
+    cdCatColabLog(`${cambios.length} colaborador(es) con cambios, ${nuevos.length} nuevo(s) sin match en CatColab${sinIdColab ? `, ${sinIdColab} fila(s) del excel sin IDColab (se ignoraron)` : ''}.`);
+    if (cambios.length || nuevos.length) document.getElementById('cdCatColabBtnAplicar').classList.remove('hidden');
+    else cdCatColabLog('No hay diferencias que aplicar.');
+  } catch (err) {
+    console.error(err);
+    cdCatColabLog('ERROR: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('cdCatColabBtnAplicar').addEventListener('click', async () => {
+  const cambiosSel = [...document.querySelectorAll('.cd-catcolab-check-cambio:checked')].map(cb => cdCatColabGrupos.cambios[Number(cb.dataset.idx)]);
+  const nuevosSel = [...document.querySelectorAll('.cd-catcolab-check-nuevo:checked')].map(cb => cdCatColabGrupos.nuevos[Number(cb.dataset.idx)]);
+  if (!cambiosSel.length && !nuevosSel.length) { await incAvisar('No hay ningún renglón seleccionado.'); return; }
+
+  const ok = await incConfirmar(
+    `Se van a aplicar ${cambiosSel.length} actualización(es) y crear ${nuevosSel.length} colaborador(es) nuevo(s) en CatColab.\n\n¿Confirmas?`
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('cdCatColabBtnAplicar');
+  btn.disabled = true;
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+    const cc = (n) => cdCatColabGrupos.mapaCampos[n] || n;
+    const TAM_LOTE = 20;
+    const PAUSA_MS = 500;
+    let aplicados = 0, errores = 0;
+
+    if (cambiosSel.length) {
+      const construirPatch = (g) => ({
+        method: 'PATCH',
+        url: `/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items/${g.itemId}/fields`,
+        headers: { 'Content-Type': 'application/json' },
+        body: Object.fromEntries(g.diffs.map(d => [cc(d.campo), d.nuevo])),
+      });
+      for (let i = 0; i < cambiosSel.length; i += TAM_LOTE) {
+        const lote = cambiosSel.slice(i, i + TAM_LOTE);
+        const res = await ejecutarLoteGraphBatch(token, ids, lote, construirPatch, cdCatColabLog);
+        aplicados += res.exitos; errores += res.errores;
+        cdCatColabLog(`Cambios: ${Math.min(i + TAM_LOTE, cambiosSel.length)}/${cambiosSel.length}`);
+        if (i + TAM_LOTE < cambiosSel.length) await cdEsperar(PAUSA_MS);
+      }
+    }
+
+    if (nuevosSel.length) {
+      const construirPost = (g) => ({
+        method: 'POST',
+        url: `/sites/${ids.siteId}/lists/${ids.listIds.catColab}/items`,
+        headers: { 'Content-Type': 'application/json' },
+        body: { fields: Object.fromEntries(Object.entries(g.fila).map(([k, v]) => [cc(k), v])) },
+      });
+      for (let i = 0; i < nuevosSel.length; i += TAM_LOTE) {
+        const lote = nuevosSel.slice(i, i + TAM_LOTE);
+        const res = await ejecutarLoteGraphBatch(token, ids, lote, construirPost, cdCatColabLog);
+        aplicados += res.exitos; errores += res.errores;
+        cdCatColabLog(`Nuevos: ${Math.min(i + TAM_LOTE, nuevosSel.length)}/${nuevosSel.length}`);
+        if (i + TAM_LOTE < nuevosSel.length) await cdEsperar(PAUSA_MS);
+      }
+    }
+
+    document.getElementById('cdCatColabActualizados').textContent = aplicados;
+    cdCatColabLog(`Listo. ${aplicados} operación(es) aplicadas, ${errores} errores.`);
+    cdCatColab = null; // fuerza recarga en fresco la próxima vez que se use en cualquier pestaña
+    if (!errores) document.getElementById('cdCatColabBtnAplicar').classList.add('hidden');
+  } catch (err) {
+    console.error(err);
+    cdCatColabLog('ERROR: ' + err.message);
   } finally {
     btn.disabled = false;
   }
