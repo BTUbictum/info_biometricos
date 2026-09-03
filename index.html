@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v97]</title>
+<title>Biométricos Colaboradores | Ubictum [v98]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v97</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v98</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -543,6 +543,7 @@
     <div class="reg-campo reg-botones">
       <button class="cd-btn" id="regBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="regBtnLimpiar" type="button">Limpiar filtros</button>
+      <button class="ghost" id="regBtnExcel" type="button">Descargar Excel</button>
     </div>
   </div>
 
@@ -556,7 +557,7 @@
         <thead class="thead-azul">
           <tr>
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
-            <th>Biométrico</th><th>Fecha</th><th>Hora</th><th>Facilitador</th><th>Líder</th><th>Jornada</th>
+            <th>Biométrico</th><th>Fecha</th><th>Hora</th><th>Facilitador</th><th>Líder</th><th>Jornada</th><th>Descansos</th>
           </tr>
         </thead>
         <tbody id="regTbody"></tbody>
@@ -609,6 +610,7 @@
     <div class="reg-campo reg-botones">
       <button class="cd-btn" id="bioBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="bioBtnLimpiar" type="button">Limpiar filtros</button>
+      <button class="ghost" id="bioBtnExcel" type="button">Descargar Excel</button>
     </div>
   </div>
 
@@ -846,6 +848,7 @@
     <div class="reg-campo reg-botones">
       <button class="cd-btn" id="diaBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="diaBtnLimpiar" type="button">Limpiar filtros</button>
+      <button class="ghost" id="diaBtnExcel" type="button">Descargar Excel</button>
     </div>
   </div>
 
@@ -859,7 +862,7 @@
         <thead class="thead-gris">
           <tr>
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th><th>Fecha</th>
-            <th>Hora Entrada</th><th>Hora Salida</th><th>Tiempo</th><th>Facilitador</th><th>Líder</th><th>Jornada</th>
+            <th>Hora Entrada</th><th>Hora Salida</th><th>Tiempo</th><th>Facilitador</th><th>Líder</th><th>Jornada</th><th>Descansos</th>
           </tr>
         </thead>
         <tbody id="diaTbody"></tbody>
@@ -941,7 +944,7 @@
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
             <th id="incThDiaLun">Lun</th><th id="incThDiaMar">Mar</th><th id="incThDiaMie">Mié</th>
             <th id="incThDiaJue">Jue</th><th id="incThDiaVie">Vie</th><th id="incThDiaSab">Sáb</th><th id="incThDiaDom">Dom</th>
-            <th>Jornada</th><th>Horas Extra</th><th>Estatus</th>
+            <th>Jornada</th><th>Descansos</th><th>Horas Extra</th><th>Estatus</th>
           </tr>
         </thead>
         <tbody id="incTbody"></tbody>
@@ -995,6 +998,7 @@
     <div class="reg-campo reg-botones">
       <button class="cd-btn" id="semBtnBuscar" type="button">Buscar</button>
       <button class="ghost" id="semBtnLimpiar" type="button">Limpiar filtros</button>
+      <button class="ghost" id="semBtnExcel" type="button">Descargar Excel</button>
     </div>
   </div>
 
@@ -1010,7 +1014,7 @@
             <th>ID Colaborador</th><th>Nombre</th><th>Turno</th><th>Área</th>
             <th id="thDiaLun">Lun</th><th id="thDiaMar">Mar</th><th id="thDiaMie">Mié</th>
             <th id="thDiaJue">Jue</th><th id="thDiaVie">Vie</th><th id="thDiaSab">Sáb</th><th id="thDiaDom">Dom</th>
-            <th>Jornada</th><th>Horas Extra</th>
+            <th>Jornada</th><th>Descansos</th><th>Horas Extra</th>
           </tr>
         </thead>
         <tbody id="semTbody"></tbody>
@@ -2841,6 +2845,7 @@ async function regBuscar(){
     const token = await obtenerTokenGraph();
     if (!regIds) regIds = await resolverGraphIds(token);
     if (!regCamposMapa) regCamposMapa = await resolverCamposRegistros(token, regIds);
+    await cargarCatalogos(token, regIds); // asegura cdCatColab vigente (Descansos)
     const c = (n) => regCamposMapa[n] || n;
 
     const desde = document.getElementById('regFechaDesde').value;
@@ -2859,8 +2864,10 @@ async function regBuscar(){
     const items = await graphFetchAll(url, token);
     regDatosDelRango = items.map(it => {
       const f = it.fields;
+      const idColab = f[c('IDColab')] || '';
+      const catColabInfo = cdCatColab ? cdCatColab.get(idColab) : null;
       return {
-        idColab: f[c('IDColab')] || '',
+        idColab,
         nombre: f[c('Nombre')] || '',
         turno: f[c('TurnoAsignado')] || '',
         area: f[c('Area')] || '',
@@ -2870,6 +2877,7 @@ async function regBuscar(){
         facilitador: f[c('Facilitador')] || '',
         lider: f[c('Lider')] || '',
         jornada: f[c('Jornada')] || '',
+        descansos: catColabInfo ? catColabInfo.descansos : '',
       };
     });
 
@@ -2899,10 +2907,7 @@ function regActualizarOpcionesDropdown(){
 
 let regFilasSeleccionadas = new Set(); // claves idColab_fecha_hora de filas marcadas
 
-function regRenderTabla(){
-  const tbody = document.getElementById('regTbody');
-  const note = document.getElementById('regTableNote');
-
+function regObtenerFiltradas(){
   const idQ = document.getElementById('regFiltroId').value.trim().toLowerCase();
   const nombreQ = document.getElementById('regFiltroNombre').value.trim().toLowerCase();
   const turnoQ = document.getElementById('regFiltroTurno').value;
@@ -2912,7 +2917,7 @@ function regRenderTabla(){
   const liderQ = document.getElementById('regFiltroLider').value;
   const jornadaQ = document.getElementById('regFiltroJornada').value;
 
-  const filtradas = regDatosDelRango.filter(r =>
+  return regDatosDelRango.filter(r =>
     (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
     (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
     (!turnoQ || r.turno === turnoQ) &&
@@ -2921,6 +2926,13 @@ function regRenderTabla(){
     (!liderQ || r.lider === liderQ) &&
     (!jornadaQ || r.jornada === jornadaQ)
   ).sort((a, b) => a.idColab.localeCompare(b.idColab) || a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora));
+}
+
+function regRenderTabla(){
+  const tbody = document.getElementById('regTbody');
+  const note = document.getElementById('regTableNote');
+
+  const filtradas = regObtenerFiltradas();
 
   const LIMITE_VISTA = 2000;
   tbody.innerHTML = '';
@@ -2932,7 +2944,7 @@ function regRenderTabla(){
     tr.innerHTML = `
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno}</td><td>${r.area}</td>
       <td>${r.biometrico}</td><td>${r.fecha}</td><td>${r.hora}</td>
-      <td>${r.facilitador}</td><td>${r.lider}</td><td>${r.jornada}</td>
+      <td>${r.facilitador}</td><td>${r.lider}</td><td>${r.jornada}</td><td>${r.descansos}</td>
     `;
     tr.addEventListener('click', () => {
       if (regFilasSeleccionadas.has(clave)) {
@@ -2959,6 +2971,18 @@ document.getElementById('regBtnLimpiar').addEventListener('click', () => {
 });
 ['regFiltroId','regFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', regRenderTabla));
 ['regFiltroTurno','regFiltroArea','regFiltroBiometrico','regFiltroFacilitador','regFiltroLider','regFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', regRenderTabla));
+
+document.getElementById('regBtnExcel').addEventListener('click', () => {
+  const filas = regObtenerFiltradas().map(r => ({
+    'ID Colaborador': r.idColab, 'Nombre': r.nombre, 'Turno': r.turno, 'Área': r.area,
+    'Biométrico': r.biometrico, 'Fecha': r.fecha, 'Hora': r.hora,
+    'Facilitador': r.facilitador, 'Líder': r.lider, 'Jornada': r.jornada, 'Descansos': r.descansos,
+  }));
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Registros');
+  XLSX.writeFile(libro, `Registros_${new Date().toISOString().slice(0,10)}.xlsx`);
+});
 
 /* ============================================================
  * PESTAÑA REGISTROS POR DÍA
@@ -3084,6 +3108,7 @@ async function diaBuscar(){
           facilitador: entrada.facilitador,
           lider: entrada.lider,
           jornada: entrada.jornada,
+          descansos: (cdCatColab && cdCatColab.get(entrada.idColab)) ? cdCatColab.get(entrada.idColab).descansos : '',
         });
       });
     });
@@ -3113,10 +3138,7 @@ function diaActualizarOpcionesDropdown(){
   });
 }
 
-function diaRenderTabla(){
-  const tbody = document.getElementById('diaTbody');
-  const note = document.getElementById('diaTableNote');
-
+function diaObtenerFiltradas(){
   const idQ = document.getElementById('diaFiltroId').value.trim().toLowerCase();
   const nombreQ = document.getElementById('diaFiltroNombre').value.trim().toLowerCase();
   const turnoQ = document.getElementById('diaFiltroTurno').value;
@@ -3125,7 +3147,7 @@ function diaRenderTabla(){
   const liderQ = document.getElementById('diaFiltroLider').value;
   const jornadaQ = document.getElementById('diaFiltroJornada').value;
 
-  const filtradas = diaDatosDelRango.filter(r =>
+  return diaDatosDelRango.filter(r =>
     (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
     (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
     (!turnoQ || r.turno === turnoQ) &&
@@ -3134,6 +3156,13 @@ function diaRenderTabla(){
     (!liderQ || r.lider === liderQ) &&
     (!jornadaQ || r.jornada === jornadaQ)
   ).sort((a, b) => a.idColab.localeCompare(b.idColab) || a.fecha.localeCompare(b.fecha));
+}
+
+function diaRenderTabla(){
+  const tbody = document.getElementById('diaTbody');
+  const note = document.getElementById('diaTableNote');
+
+  const filtradas = diaObtenerFiltradas();
 
   const LIMITE_VISTA = 2000;
   tbody.innerHTML = '';
@@ -3142,7 +3171,7 @@ function diaRenderTabla(){
     tr.innerHTML = `
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno}</td><td>${r.area}</td><td>${r.fecha}</td>
       <td>${r.horaEntrada}</td><td>${r.horaSalida}</td><td>${r.tiempo}</td>
-      <td>${r.facilitador}</td><td>${r.lider}</td><td>${r.jornada}</td>
+      <td>${r.facilitador}</td><td>${r.lider}</td><td>${r.jornada}</td><td>${r.descansos}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -3160,6 +3189,18 @@ document.getElementById('diaBtnLimpiar').addEventListener('click', () => {
 });
 ['diaFiltroId','diaFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', diaRenderTabla));
 ['diaFiltroTurno','diaFiltroArea','diaFiltroFacilitador','diaFiltroLider','diaFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', diaRenderTabla));
+
+document.getElementById('diaBtnExcel').addEventListener('click', () => {
+  const filas = diaObtenerFiltradas().map(r => ({
+    'ID Colaborador': r.idColab, 'Nombre': r.nombre, 'Turno': r.turno, 'Área': r.area, 'Fecha': r.fecha,
+    'Hora Entrada': r.horaEntrada, 'Hora Salida': r.horaSalida, 'Tiempo': r.tiempo,
+    'Facilitador': r.facilitador, 'Líder': r.lider, 'Jornada': r.jornada, 'Descansos': r.descansos,
+  }));
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Registros por Día');
+  XLSX.writeFile(libro, `Registros_por_Dia_${new Date().toISOString().slice(0,10)}.xlsx`);
+});
 
 /* ============================================================
  * PESTAÑA REGISTROS POR SEMANA
@@ -3360,6 +3401,7 @@ async function semBuscar(){
         facilitador: primerConDatos.facilitador,
         lider: primerConDatos.lider,
         jornada: primerConDatos.jornada,
+        descansos: catColabInfoSem ? catColabInfoSem.descansos : '',
         elegibleHorasExtra, horaExtraSemana,
       });
     });
@@ -3389,10 +3431,7 @@ function semActualizarOpcionesDropdown(){
   });
 }
 
-function semRenderTabla(){
-  const tbody = document.getElementById('semTbody');
-  const note = document.getElementById('semTableNote');
-
+function semObtenerFiltradas(){
   const idQ = document.getElementById('semFiltroId').value.trim().toLowerCase();
   const nombreQ = document.getElementById('semFiltroNombre').value.trim().toLowerCase();
   const turnoQ = document.getElementById('semFiltroTurno').value;
@@ -3401,7 +3440,7 @@ function semRenderTabla(){
   const liderQ = document.getElementById('semFiltroLider').value;
   const jornadaQ = document.getElementById('semFiltroJornada').value;
 
-  const filtradas = diaSemanaFilas.filter(r =>
+  return diaSemanaFilas.filter(r =>
     (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
     (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
     (!turnoQ || r.turno === turnoQ) &&
@@ -3410,6 +3449,13 @@ function semRenderTabla(){
     (!liderQ || r.lider === liderQ) &&
     (!jornadaQ || r.jornada === jornadaQ)
   ).sort((a, b) => a.idColab.localeCompare(b.idColab));
+}
+
+function semRenderTabla(){
+  const tbody = document.getElementById('semTbody');
+  const note = document.getElementById('semTableNote');
+
+  const filtradas = semObtenerFiltradas();
 
   tbody.innerHTML = '';
   filtradas.forEach(r => {
@@ -3418,6 +3464,7 @@ function semRenderTabla(){
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno || ''}</td><td>${r.area || ''}</td>
       ${r.dias.map(d => `<td${d.retardo ? ' style="background:#fff3b0;"' : ''}>${d.texto}</td>`).join('')}
       <td>${r.jornada || ''}</td>
+      <td>${r.descansos || ''}</td>
       <td>${r.elegibleHorasExtra ? r.horaExtraSemana : '—'}</td>
     `;
     tbody.appendChild(tr);
@@ -3434,6 +3481,26 @@ document.getElementById('semBtnLimpiar').addEventListener('click', () => {
 });
 ['semFiltroId','semFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', semRenderTabla));
 ['semFiltroTurno','semFiltroArea','semFiltroFacilitador','semFiltroLider','semFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', semRenderTabla));
+
+function textoDiaAPlano(html){
+  const partes = [...html.matchAll(/<span>(.*?)<\/span>/g)].map(m => m[1]);
+  return partes.length ? partes.join(' - ') : html.replace(/<[^>]+>/g, '');
+}
+
+document.getElementById('semBtnExcel').addEventListener('click', () => {
+  const filas = semObtenerFiltradas().map(r => {
+    const obj = { 'ID Colaborador': r.idColab, 'Nombre': r.nombre, 'Turno': r.turno || '', 'Área': r.area || '' };
+    r.dias.forEach((d, idx) => { obj[DIAS_SEMANA[idx]] = textoDiaAPlano(d.texto); });
+    obj['Jornada'] = r.jornada || '';
+    obj['Descansos'] = r.descansos || '';
+    obj['Horas Extra'] = r.elegibleHorasExtra ? r.horaExtraSemana : '—';
+    return obj;
+  });
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Registros por Semana');
+  XLSX.writeFile(libro, `Registros_por_Semana_${new Date().toISOString().slice(0,10)}.xlsx`);
+});
 
 /* ============================================================
  * PESTAÑA REGISTROS POR BIOMÉTRICO
@@ -3591,10 +3658,7 @@ function bioActualizarOpcionesDropdown(){
   });
 }
 
-function bioRenderTabla(){
-  const tbody = document.getElementById('bioTbody');
-  const note = document.getElementById('bioTableNote');
-
+function bioObtenerFiltradas(){
   const idQ = document.getElementById('bioFiltroId').value.trim().toLowerCase();
   const nombreQ = document.getElementById('bioFiltroNombre').value.trim().toLowerCase();
   const turnoQ = document.getElementById('bioFiltroTurno').value;
@@ -3603,7 +3667,7 @@ function bioRenderTabla(){
   const liderQ = document.getElementById('bioFiltroLider').value;
   const jornadaQ = document.getElementById('bioFiltroJornada').value;
 
-  const filtradas = bioFilasDatos.filter(r =>
+  return bioFilasDatos.filter(r =>
     (!idQ || r.idColab.toLowerCase().includes(idQ)) &&
     (!nombreQ || r.nombre.toLowerCase().includes(nombreQ)) &&
     (!turnoQ || r.turno === turnoQ) &&
@@ -3612,6 +3676,13 @@ function bioRenderTabla(){
     (!liderQ || r.lider === liderQ) &&
     (!jornadaQ || r.jornada === jornadaQ)
   ).sort((a, b) => a.idColab.localeCompare(b.idColab) || a.fecha.localeCompare(b.fecha));
+}
+
+function bioRenderTabla(){
+  const tbody = document.getElementById('bioTbody');
+  const note = document.getElementById('bioTableNote');
+
+  const filtradas = bioObtenerFiltradas();
 
   const LIMITE_VISTA = 1000;
   tbody.innerHTML = '';
@@ -3643,6 +3714,24 @@ document.getElementById('bioBtnLimpiar').addEventListener('click', () => {
 });
 ['bioFiltroId','bioFiltroNombre'].forEach(id => document.getElementById(id).addEventListener('input', bioRenderTabla));
 ['bioFiltroTurno','bioFiltroArea','bioFiltroFacilitador','bioFiltroLider','bioFiltroJornada'].forEach(id => document.getElementById(id).addEventListener('change', bioRenderTabla));
+
+document.getElementById('bioBtnExcel').addEventListener('click', () => {
+  const filas = bioObtenerFiltradas().map(r => {
+    const obj = {
+      'ID Colaborador': r.idColab, 'Nombre': r.nombre, 'Turno': r.turno, 'Área': r.area,
+      'Fecha': r.fecha, 'Jornada': r.jornada, 'Facilitador': r.facilitador, 'Líder': r.lider,
+    };
+    BIOMETRICOS_ORDEN.forEach(nombreBio => {
+      const horas = r.porBiometrico[nombreBio];
+      obj[nombreBio] = horas && horas.length ? horas.join(', ') : '';
+    });
+    return obj;
+  });
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Registros por Biométrico');
+  XLSX.writeFile(libro, `Registros_por_Biometrico_${new Date().toISOString().slice(0,10)}.xlsx`);
+});
 
 /* ============================================================
  * PESTAÑA REGISTRO INCIDENCIAS
@@ -4037,7 +4126,7 @@ async function incBuscar(){
         turno: moda(conteoTurno), area: moda(conteoArea),
         biometricoValores: porDiaSesion.filter(Boolean).map(d => d.entrada.biometrico),
         facilitador: primerConDatos.facilitador, lider: primerConDatos.lider,
-        jornada: primerConDatos.jornada, cerrado, estatus,
+        jornada: primerConDatos.jornada, descansos: catColabInfoInc ? catColabInfoInc.descansos : '', cerrado, estatus,
         elegibleHorasExtra: elegibleHorasExtraInc, horaExtraSemana: horaExtraSemanaInc,
         guardadoPor: infoGuardado ? infoGuardado.guardadoPor : '',
         modificadoPorTyC: infoGuardado ? infoGuardado.modificadoPorTyC : '',
@@ -4189,6 +4278,7 @@ function incRenderTabla(){
       <td>${r.idColab}</td><td>${r.nombre}</td><td>${r.turno || ''}</td><td>${r.area || ''}</td>
       ${celdasDias}
       <td>${r.jornada || ''}</td>
+      <td>${r.descansos || ''}</td>
       <td>${r.elegibleHorasExtra ? r.horaExtraSemana : '—'}</td>
       <td class="${claseEstatus}">${etiquetaEstatus}</td>
     `;
@@ -4428,6 +4518,7 @@ document.getElementById('incBtnExcel').addEventListener('click', () => {
       obj[DIAS_SEMANA[idx]] = valor;
     });
     obj['Jornada'] = r.jornada;
+    obj['Descansos'] = r.descansos;
     obj['Estatus'] = etiquetaEstatus[r.estatus];
     obj['GuardadoPor'] = r.guardadoPor;
     obj['ModificadoPorTyC'] = r.modificadoPorTyC;
