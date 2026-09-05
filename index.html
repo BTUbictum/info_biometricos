@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v98]</title>
+<title>Biométricos Colaboradores | Ubictum [v99]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v98</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v99</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -4236,8 +4236,15 @@ function incRenderTabla(){
       // 10 min después del inicio de Jornada), preselecciona "R" en vez de
       // "A". Si no hay checada real, se respeta lo ya guardado; si no hay
       // nada de nada, F por default (D si ese día es descanso registrado).
+      // EXCEPCIÓN: un código I/II ya guardado (Incapacidad, autoridad de
+      // Enfermería) nunca se sobreescribe por esta detección automática,
+      // aunque exista una checada parcial ese día (ej. el colaborador entró
+      // y se retiró por incapacidad sin registrar salida) — médicamente la
+      // incapacidad manda sobre la asistencia detectada.
       let codigoDefault;
-      if (d.sesionReal) {
+      if (bv.tipo === 'guardado' && (bv.codigo === 'I' || bv.codigo === 'II')) {
+        codigoDefault = bv.codigo;
+      } else if (d.sesionReal) {
         codigoDefault = esRetardoHoy ? 'R' : 'A';
       } else if (bv.tipo === 'guardado') {
         codigoDefault = bv.codigo;
