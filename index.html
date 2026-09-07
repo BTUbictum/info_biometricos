@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v101]</title>
+<title>Biométricos Colaboradores | Ubictum [v103]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v101</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v103</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -776,24 +776,25 @@
       Quita el bloqueo de "Semana Cerrada" en RegIncidencias para que Facilitador/Líder puedan volver a editar.
       Las fechas son opcionales: déjalas vacías para que el buscador te muestre qué está cerrado y en qué fechas
       exactas, sin que tengas que saberlo de antemano. Pon el ID de un colaborador para acotar a una sola persona,
-      o déjalo en blanco para ver a todos. No toca los códigos ya guardados (F/A/PSG/etc.), solo quita el candado.
+      o elige Facilitador/Líder desde el combo — se puede combinar cualquiera de los filtros, o dejarlos todos en
+      "Todos" para ver a todos. No toca los códigos ya guardados (F/A/PSG/etc.), solo quita el candado.
     </p>
     <div class="reg-filtros">
       <div class="reg-campo">
-        <label>Fecha desde (opcional)</label>
-        <input type="date" id="cdReabrirFechaDesde">
-      </div>
-      <div class="reg-campo">
-        <label>Fecha hasta (opcional)</label>
-        <input type="date" id="cdReabrirFechaHasta">
+        <label>Semana (opcional)</label>
+        <input type="week" id="cdReabrirSemana">
       </div>
       <div class="reg-campo">
         <label>ID Colaborador (opcional)</label>
         <input type="text" id="cdReabrirIdColab" placeholder="Ej. 100357 — déjalo vacío para todos">
       </div>
       <div class="reg-campo">
+        <label>Facilitador (opcional)</label>
+        <select id="cdReabrirFacilitador"><option value="">Todos</option></select>
+      </div>
+      <div class="reg-campo">
         <label>Líder (opcional)</label>
-        <input type="text" id="cdReabrirLider" placeholder="Ej. Miguel Angel Llamas Rodriguez">
+        <select id="cdReabrirLider"><option value="">Todos</option></select>
       </div>
     </div>
     <button class="cd-btn" id="cdReabrirBtnBuscar" type="button">Buscar semanas cerradas</button>
@@ -1931,6 +1932,35 @@ async function inicializarCarga(){
   }
   document.getElementById('cdQuienSoy').textContent =
     `Conectado como: ${incUsuarioActual.correo} · Roles: ${[...incUsuarioActual.roles].join(', ') || '(ninguno)'}`;
+  cdReabrirPoblarDropdowns();
+}
+
+// Llena los combos de Facilitador/Líder de "Reabrir Semana" con los valores
+// únicos vigentes en CatColab, para elegir en vez de tener que escribir el
+// nombre exacto a mano.
+async function cdReabrirPoblarDropdowns(){
+  try {
+    const token = await obtenerTokenGraph();
+    const ids = await resolverGraphIds(token);
+    await cargarCatalogos(token, ids);
+    if (!cdCatColab) return;
+    const facilitadores = new Set(), lideres = new Set();
+    cdCatColab.forEach(info => {
+      if (info.facilitador) facilitadores.add(info.facilitador);
+      if (info.lider) lideres.add(info.lider);
+    });
+    const llenar = (id, valores) => {
+      const select = document.getElementById(id);
+      const actual = select.value;
+      select.innerHTML = '<option value="">Todos</option>' +
+        [...valores].sort((a, b) => a.localeCompare(b)).map(v => `<option value="${v}">${v}</option>`).join('');
+      select.value = actual;
+    };
+    llenar('cdReabrirFacilitador', facilitadores);
+    llenar('cdReabrirLider', lideres);
+  } catch (err) {
+    console.error('[Reabrir Semana] error poblando combos de Facilitador/Líder:', err);
+  }
 }
 
 document.getElementById('cdStep1').addEventListener('click', () => document.getElementById('cdFileInput').click());
@@ -2389,12 +2419,19 @@ function cdReabrirLog(msg){
 let cdReabrirGrupos = new Map(); // idColab -> { idColab, nombre, fechaMin, fechaMax, itemIds }
 
 document.getElementById('cdReabrirBtnBuscar').addEventListener('click', async () => {
-  const lunesStr = document.getElementById('cdReabrirFechaDesde').value; // puede venir vacío
-  const domingoStr = document.getElementById('cdReabrirFechaHasta').value; // puede venir vacío
+  const valorSemana = document.getElementById('cdReabrirSemana').value; // puede venir vacío
+  let lunesStr = '', domingoStr = '';
+  if (valorSemana) {
+    const [yearSemana, numSemana] = valorSemana.split('-W').map(Number);
+    const { lunes: lunesSel, domingo: domingoSel } = semanaAFechas(yearSemana, numSemana);
+    lunesStr = lunesSel.toISOString().slice(0, 10);
+    domingoStr = domingoSel.toISOString().slice(0, 10);
+  }
   const idColabFiltro = document.getElementById('cdReabrirIdColab').value.trim();
+  const facilitadorFiltro = document.getElementById('cdReabrirFacilitador').value.trim();
   const liderFiltro = document.getElementById('cdReabrirLider').value.trim();
-  if (!lunesStr && !domingoStr && !idColabFiltro && !liderFiltro) {
-    const ok = await incConfirmar('No pusiste fechas, ID de colaborador ni Líder — esto va a revisar TODA la lista de RegIncidencias buscando semanas cerradas. Puede tardar unos segundos. ¿Continuar?');
+  if (!lunesStr && !domingoStr && !idColabFiltro && !facilitadorFiltro && !liderFiltro) {
+    const ok = await incConfirmar('No pusiste fechas, ID de colaborador, Facilitador ni Líder — esto va a revisar TODA la lista de RegIncidencias buscando semanas cerradas. Puede tardar unos segundos. ¿Continuar?');
     if (!ok) return;
   }
 
@@ -2467,17 +2504,22 @@ document.getElementById('cdReabrirBtnBuscar').addEventListener('click', async ()
       g.itemIds.push(it.id);
     });
 
-    // Filtro opcional por Líder: cruza contra CatColab vigente (recarga en
-    // fresco, igual que el resto de las herramientas de Carga de Data).
-    if (liderFiltro) {
-      cdReabrirLog(`Cruzando contra CatColab para filtrar por líder "${liderFiltro}"…`);
+    // Filtro opcional por Facilitador y/o Líder: cruza contra CatColab
+    // vigente (recarga en fresco, igual que el resto de las herramientas de
+    // Carga de Data).
+    if (facilitadorFiltro || liderFiltro) {
+      cdReabrirLog(`Cruzando contra CatColab para filtrar` +
+        `${facilitadorFiltro ? ` por facilitador "${facilitadorFiltro}"` : ''}` +
+        `${facilitadorFiltro && liderFiltro ? ' y' : ''}` +
+        `${liderFiltro ? ` por líder "${liderFiltro}"` : ''}…`);
       cdCatColab = null;
       await cargarCatalogos(token, ids);
+      const facilitadorNorm = normalizarNombre(facilitadorFiltro);
       const liderNorm = normalizarNombre(liderFiltro);
       [...porColab.keys()].forEach(idColab => {
         const info = cdCatColab.get(idColab);
-        const liderDeEse = info ? normalizarNombre(info.lider) : '';
-        if (liderDeEse !== liderNorm) porColab.delete(idColab);
+        if (facilitadorFiltro && normalizarNombre(info ? info.facilitador : '') !== facilitadorNorm) { porColab.delete(idColab); return; }
+        if (liderFiltro && normalizarNombre(info ? info.lider : '') !== liderNorm) { porColab.delete(idColab); return; }
       });
     }
 
