@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v99]</title>
+<title>Biométricos Colaboradores | Ubictum [v101]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v99</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v101</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -674,6 +674,37 @@
     </div>
     <button class="cd-btn" id="cdBtnSubir" type="button">Subir a SharePoint</button>
     <div class="cd-log" id="cdLog" style="margin-top:14px;"></div>
+  </div>
+
+  <div class="card" style="margin-top:28px;">
+    <h2 style="font-size:16px; margin-bottom:4px;">Crear Semana por Vacaciones</h2>
+    <p style="font-size:13px; color:var(--gris,#636469); margin-bottom:14px; max-width:720px;">
+      Para colaboradores que inician la semana de vacaciones y no tienen ninguna checada biométrica esos días,
+      su semana completa no aparece en Registro Incidencias. Esta herramienta crea los días de esa semana que
+      todavía no tengan checada real ni registro guardado (con "F", o "D" si ese día es su descanso registrado
+      en CatColab) para que la semana se muestre completa ahí — después entras a Registro Incidencias y capturas
+      la "V" de Vacaciones en los días que correspondan. Nunca sobreescribe un día que ya tenga checada real o
+      un registro ya guardado.
+    </p>
+    <div class="reg-filtros">
+      <div class="reg-campo">
+        <label>ID Colaborador</label>
+        <input type="text" id="cdVacIdColab" placeholder="Ej. 100546">
+      </div>
+      <div class="reg-campo">
+        <label>Semana</label>
+        <input type="week" id="cdVacSemana">
+      </div>
+    </div>
+    <button class="cd-btn" id="cdVacBtnBuscar" type="button">Revisar semana</button>
+
+    <div id="cdVacResumen" class="cd-summary hidden" style="margin-top:14px; grid-template-columns:repeat(3,1fr);">
+      <div class="cd-box"><div class="n" id="cdVacNombre">—</div><div class="l">Colaborador</div></div>
+      <div class="cd-box"><div class="n" id="cdVacDiasFaltantes">0</div><div class="l">Días a crear</div></div>
+      <div class="cd-box"><div class="n" id="cdVacDiasConDatos">0</div><div class="l">Días ya con datos (se respetan)</div></div>
+    </div>
+    <button class="cd-btn hidden" id="cdVacBtnCrear" type="button" style="margin-top:10px;">Crear Semana por Vacaciones</button>
+    <div class="cd-log" id="cdVacLog" style="margin-top:14px;"></div>
   </div>
 
   <div class="card" style="margin-top:28px;">
@@ -1194,6 +1225,7 @@ let cdCatTurnos = null;    // array de filas de CatTurnos (parseadas a minutos)
 let cdCamposRegistros = null; // mapa displayName -> nombre interno real, para RegBio26
 let cdCatColab = null;     // Map IDColab -> { facilitador, lider }
 let cdLiderPorNombre = null; // Map Nombre (de cualquier persona en CatColab) -> su propio Lider — para resolver el árbol Líder→Facilitador→Colaborador
+let cdVacEstado = null;    // Estado temporal de "Crear Semana por Vacaciones" (Carga de Data)
 
 // Compara nombres de persona ignorando acentos, mayúsculas y espacios extra
 // — para no fallar por diferencias de captura entre listas (ej. "Rodríguez"
@@ -1387,6 +1419,8 @@ async function cargarCatalogos(token, ids){
     }
     if (idColab) {
       cdCatColab.set(String(idColab).trim(), {
+        nombre: nombrePropio || '',
+        turnoAsignado: f[cc('TurnoAsignado')] || '',
         facilitador: f[cc('Facilitador')] || '',
         lider: f[cc('Lider')] || '',
         jornada: f[cc('Jornada')] || '',
@@ -1471,6 +1505,34 @@ function esJornadaNocturna(jornadaStr){
 function jornadaVigenteODeSnapshot(idColab, jornadaSnapshot){
   const info = (cdCatColab && idColab) ? cdCatColab.get(idColab) : null;
   return (info && info.jornada) ? info.jornada : (jornadaSnapshot || '');
+}
+
+// Construye un Date a partir de (fecha, hora) de forma tolerante a valores
+// mal formados que a veces llegan de SharePoint/Graph (Fecha vacía, Hora con
+// formato inesperado, etc.). Antes, un solo registro así producía un Date
+// inválido (NaN) que no fallaba de inmediato, sino mucho más adelante: dentro
+// de agruparEnSesiones se llama a dt.toISOString(), y en Firefox eso lanza el
+// error "invalid date" — lo cual tumbaba TODA la consulta de Registros por
+// Día / Semana / Biométrico / Registro Incidencias para el rango de fechas
+// completo, sin importar qué colaborador se buscara, porque el agrupamiento
+// se hace sobre TODOS los colaboradores del rango antes de filtrar por ID.
+// Ahora, un registro con Fecha/Hora ilegible se detecta aquí, se avisa en la
+// consola, y se descarta de ese agrupamiento en vez de tronar la consulta
+// entera.
+function construirFechaHora(fecha, hora){
+  const fechaOk = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : null;
+  if (!fechaOk) {
+    console.warn('[Biométricos] Registro con Fecha inválida/vacía, se ignora para el agrupamiento por sesión:', { fecha, hora });
+    return null;
+  }
+  const matchHora = String(hora || '').match(/^(\d{2}):(\d{2}):(\d{2})/);
+  const horaOk = matchHora ? `${matchHora[1]}:${matchHora[2]}:${matchHora[3]}` : '00:00:00';
+  const dt = new Date(fechaOk + 'T' + horaOk + 'Z');
+  if (isNaN(dt.getTime())) {
+    console.warn('[Biométricos] Registro con Fecha/Hora que no se pudo interpretar, se ignora:', { fecha, hora });
+    return null;
+  }
+  return dt;
 }
 
 function agruparEnSesiones(registrosOrdenados, esNocturno){
@@ -2212,10 +2274,10 @@ document.getElementById('cdHeBtnBuscar').addEventListener('click', async () => {
       return {
         itemId: it.id,
         idColab: String(f[campoIDColab] || '').trim(),
-        dt: new Date(fecha + 'T' + hora + 'Z'),
+        dt: construirFechaHora(fecha, hora),
         horaExtraActual: (he === 0 || he) ? he : null,
       };
-    });
+    }).filter(r => r.dt);
 
     const porColab = new Map();
     crudos.forEach(r => {
@@ -3070,9 +3132,9 @@ async function diaBuscar(){
         facilitador: f[c('Facilitador')] || '',
         lider: f[c('Lider')] || '',
         jornada: f[c('Jornada')] || '',
-        dt: new Date(fecha + 'T' + hora + 'Z'),
+        dt: construirFechaHora(fecha, hora),
       };
-    });
+    }).filter(r => r.dt);
     diaValoresParaDropdown = crudos;
 
     // Agrupar por colaborador y armar sesiones (Entrada/Salida del día).
@@ -3318,9 +3380,9 @@ async function semBuscar(){
         lider: f[c('Lider')] || '',
         jornada: f[c('Jornada')] || '',
         horaExtra: (f[c('HoraExtra')] === 0 || f[c('HoraExtra')]) ? f[c('HoraExtra')] : null,
-        dt: new Date(fecha + 'T' + hora + 'Z'),
+        dt: construirFechaHora(fecha, hora),
       };
-    });
+    }).filter(r => r.dt);
     semValoresParaDropdown = crudos;
 
     // Agrupar por colaborador → sesiones → asignar cada sesión a su día de la semana.
@@ -3589,9 +3651,9 @@ async function bioBuscar(){
         facilitador: f[c('Facilitador')] || '',
         lider: f[c('Lider')] || '',
         jornada: f[c('Jornada')] || '',
-        dt: new Date(fecha + 'T' + hora + 'Z'),
+        dt: construirFechaHora(fecha, hora),
       };
-    });
+    }).filter(r => r.dt);
     bioValoresParaDropdown = crudos;
 
     const porColab = new Map();
@@ -3962,10 +4024,10 @@ async function incBuscar(){
         turno: f[c('TurnoAsignado')] || '', area: f[c('Area')] || '',
         biometrico: f[c('Biometrico')] || '', fecha, hora,
         facilitador: f[c('Facilitador')] || '', lider: f[c('Lider')] || '',
-        jornada: f[c('Jornada')] || '', dt: new Date(fecha + 'T' + hora + 'Z'),
+        jornada: f[c('Jornada')] || '', dt: construirFechaHora(fecha, hora),
         horaExtra: (he === 0 || he) ? he : null,
       };
-    });
+    }).filter(r => r.dt);
     incValoresParaDropdown = crudos;
 
     const porColab = new Map();
@@ -4013,9 +4075,17 @@ async function incBuscar(){
     const HOY_STR = new Date().toISOString().slice(0, 10);
 
     const filas = [];
-    porColab.forEach(registros => {
+    // Antes se iteraba solo sobre porColab (colaboradores con al menos una
+    // checada real en la semana consultada), así que un colaborador sin
+    // NINGUNA checada esa semana (ej. vacaciones desde el lunes) desaparecía
+    // por completo del listado, aunque ya tuviera días creados/guardados en
+    // RegIncidencias (ver "Crear Semana por Vacaciones" en Carga de Data).
+    // Ahora se recorre la unión de ambas fuentes.
+    const idsColabTodos = new Set([...porColab.keys(), ...incCerradosMap.keys()]);
+    idsColabTodos.forEach(idColab => {
+      const registros = porColab.get(idColab) || [];
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
-      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(ordenados[0] ? ordenados[0].idColab : '', ordenados[0] ? ordenados[0].jornada : '')));
+      const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(idColab, ordenados[0] ? ordenados[0].jornada : '')));
 
       const porDiaSesion = new Array(7).fill(null);
       sesiones.forEach(sesion => {
@@ -4030,11 +4100,26 @@ async function incBuscar(){
         porDiaSesion[idxDia] = { entrada, salida, hayRealSalida, horaExtra: hayRealSalida ? (salida.horaExtra ?? entrada.horaExtra ?? null) : null };
       });
 
-      if (porDiaSesion.every(d => d === null)) return;
-
-      const primerConDatos = porDiaSesion.find(d => d).entrada;
-      const idColab = primerConDatos.idColab;
       const infoGuardado = incCerradosMap.get(idColab);
+      // Solo se descarta al colaborador si NO hay checada real ninguna Y
+      // TAMPOCO hay nada guardado en RegIncidencias esa semana.
+      if (porDiaSesion.every(d => d === null) && !infoGuardado) return;
+
+      const diaConDatos = porDiaSesion.find(d => d);
+      const catColabInfoFallback = cdCatColab ? cdCatColab.get(idColab) : null;
+      // Sin ninguna checada esa semana (colaborador solo presente vía
+      // RegIncidencias, típicamente por "Crear Semana por Vacaciones"), no
+      // hay un renglón real del que tomar Nombre/Turno/Facilitador/etc. —
+      // se arma un equivalente desde CatColab vigente.
+      const primerConDatos = diaConDatos ? diaConDatos.entrada : {
+        idColab,
+        nombre: (catColabInfoFallback && catColabInfoFallback.nombre) || idColab,
+        turno: (catColabInfoFallback && catColabInfoFallback.turnoAsignado) || '',
+        area: '',
+        facilitador: (catColabInfoFallback && catColabInfoFallback.facilitador) || '',
+        lider: (catColabInfoFallback && catColabInfoFallback.lider) || '',
+        jornada: (catColabInfoFallback && catColabInfoFallback.jornada) || '',
+      };
       const cerrado = !!(infoGuardado && infoGuardado.cerrado);
       const estatus = cerrado ? 'cerrada' : (infoGuardado ? 'guardado' : 'sinGuardar');
 
@@ -4123,7 +4208,7 @@ async function incBuscar(){
 
       filas.push({
         idColab, nombre: primerConDatos.nombre,
-        turno: moda(conteoTurno), area: moda(conteoArea),
+        turno: moda(conteoTurno) || primerConDatos.turno || '', area: moda(conteoArea) || primerConDatos.area || '',
         biometricoValores: porDiaSesion.filter(Boolean).map(d => d.entrada.biometrico),
         facilitador: primerConDatos.facilitador, lider: primerConDatos.lider,
         jornada: primerConDatos.jornada, descansos: catColabInfoInc ? catColabInfoInc.descansos : '', cerrado, estatus,
@@ -4537,6 +4622,166 @@ document.getElementById('incBtnExcel').addEventListener('click', () => {
   XLSX.utils.book_append_sheet(libro, hoja, 'Incidencias');
   XLSX.writeFile(libro, `Registro_Incidencias_${new Date().toISOString().slice(0,10)}.xlsx`);
 });
+
+/* ============================================================
+ * CARGA DE DATA — Crear Semana por Vacaciones
+ * ------------------------------------------------------------
+ * Un colaborador sin NINGUNA checada real en la semana (ej.
+ * vacaciones desde el lunes) no genera fila en Registro
+ * Incidencias, así que no hay dónde capturar la "V". Esta
+ * herramienta crea directamente en RegIncidencias los días de
+ * la semana que aún no tengan checada real ni registro guardado
+ * (F, o D si es descanso registrado en CatColab), para que la
+ * semana completa aparezca en Registro Incidencias y el líder
+ * pueda entrar a poner la V donde corresponda. Nunca toca un día
+ * que ya tenga checada real o dato guardado.
+ * ============================================================ */
+async function cdVacRevisar(){
+  const idColab = document.getElementById('cdVacIdColab').value.trim();
+  const valorSemana = document.getElementById('cdVacSemana').value;
+  const log = document.getElementById('cdVacLog');
+  const resumen = document.getElementById('cdVacResumen');
+  const btnCrear = document.getElementById('cdVacBtnCrear');
+  log.textContent = '';
+  resumen.classList.add('hidden');
+  btnCrear.classList.add('hidden');
+  cdVacEstado = null;
+
+  if (!idColab) { log.textContent = 'Captura un ID Colaborador.'; return; }
+  if (!valorSemana) { log.textContent = 'Selecciona una semana.'; return; }
+
+  const [year, semana] = valorSemana.split('-W').map(Number);
+  const { lunes, domingo } = semanaAFechas(year, semana);
+  const lunesStr = lunes.toISOString().slice(0, 10);
+  const domingoStr = domingo.toISOString().slice(0, 10);
+
+  log.textContent = 'Consultando…';
+  try {
+    const token = await obtenerTokenGraph();
+    if (!regIds) regIds = await resolverGraphIds(token);
+    await cargarCatalogos(token, regIds); // asegura cdCatColab (Nombre, Turno, Facilitador, Líder, Jornada, Descansos)
+    const catInfo = cdCatColab ? cdCatColab.get(idColab) : null;
+    if (!catInfo) {
+      log.textContent = `El colaborador ${idColab} no está en CatColab — revisa el ID antes de continuar.`;
+      return;
+    }
+
+    const unDiaMs = 24 * 60 * 60 * 1000;
+    const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
+    const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
+
+    // Checadas reales de ese colaborador esa semana (RegBio26 / Registros)
+    const camposMapaReg = await resolverCamposRegistros(token, regIds);
+    const cr = (n) => camposMapaReg[n] || n;
+    const filtroReg = encodeURIComponent(`fields/${cr('IDColab')} eq '${idColab}' and fields/${cr('Fecha')} ge '${desdeAmpliado}' and fields/${cr('Fecha')} le '${hastaAmpliado}'`);
+    const urlReg = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${['IDColab','Fecha','Hora'].map(cr).join(',')})&$filter=${filtroReg}&$top=500`;
+    const itemsReg = await graphFetchAll(urlReg, token);
+    const diasConChecada = new Set();
+    itemsReg.forEach(it => {
+      const fecha = (it.fields[cr('Fecha')] || '').slice(0, 10);
+      if (fecha >= lunesStr && fecha <= domingoStr) diasConChecada.add(fecha);
+    });
+
+    // Registros ya guardados en RegIncidencias esa semana
+    const camposMapaInc = await resolverCamposRegIncidencias(token, regIds);
+    const ic = (n) => camposMapaInc[n] || n;
+    const filtroInc = encodeURIComponent(`fields/${ic('IDColab')} eq '${idColab}' and fields/${ic('Fecha')} ge '${desdeAmpliado}' and fields/${ic('Fecha')} le '${hastaAmpliado}'`);
+    const urlInc = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.regIncidencias}/items?expand=fields(select=${['IDColab','Fecha'].map(ic).join(',')})&$filter=${filtroInc}&$top=500`;
+    const itemsInc = await graphFetchAll(urlInc, token);
+    const diasConGuardado = new Set();
+    itemsInc.forEach(it => {
+      const fechaRaw = it.fields[ic('Fecha')];
+      const fecha = fechaRaw ? new Date(fechaRaw).toISOString().slice(0, 10) : '';
+      if (fecha) diasConGuardado.add(fecha);
+    });
+
+    const diasSemana = [];
+    for (let i = 0; i < 7; i++) diasSemana.push(new Date(lunes.getTime() + i * 86400000).toISOString().slice(0, 10));
+    const diasAcrear = diasSemana.filter(f => !diasConChecada.has(f) && !diasConGuardado.has(f));
+    const diasConDatos = diasSemana.filter(f => diasConChecada.has(f) || diasConGuardado.has(f));
+
+    cdVacEstado = { idColab, nombre: catInfo.nombre || idColab, semana: String(semana).padStart(2, '0'), year: String(year), diasAcrear, catInfo };
+
+    document.getElementById('cdVacNombre').textContent = catInfo.nombre || idColab;
+    document.getElementById('cdVacDiasFaltantes').textContent = diasAcrear.length;
+    document.getElementById('cdVacDiasConDatos').textContent = diasConDatos.length;
+    resumen.classList.remove('hidden');
+
+    if (!diasAcrear.length) {
+      log.textContent = 'Esta semana ya tiene checada real o registro guardado en los 7 días — no hay nada que crear.';
+    } else {
+      log.textContent = `Listo para crear ${diasAcrear.length} día(s): ${diasAcrear.join(', ')}.`;
+      btnCrear.classList.remove('hidden');
+    }
+  } catch (err) {
+    console.error(err);
+    log.textContent = 'Error al consultar: ' + err.message;
+  }
+}
+
+async function cdVacCrear(){
+  if (!cdVacEstado || !cdVacEstado.diasAcrear.length) return;
+  const { idColab, nombre, semana, year, diasAcrear, catInfo } = cdVacEstado;
+  const log = document.getElementById('cdVacLog');
+  const btnCrear = document.getElementById('cdVacBtnCrear');
+
+  const mensaje = `Vas a crear ${diasAcrear.length} día(s) para ${nombre} (${idColab}) en la semana ${semana}-${year}: ${diasAcrear.join(', ')}.\n` +
+    `Cada día se crea con "F" (o "D" si ese día es su descanso registrado) para que la semana se vea completa — ` +
+    `después entra a Registro Incidencias a poner la V de Vacaciones donde corresponda. Ningún día con checada ` +
+    `real o dato ya guardado se toca. ¿Continuar?`;
+  if (!(await incConfirmar(mensaje))) return;
+
+  btnCrear.disabled = true;
+  log.textContent = 'Creando…';
+  try {
+    const token = await obtenerTokenGraph();
+    const camposMapaInc = await resolverCamposRegIncidencias(token, regIds);
+    const ic = (n) => camposMapaInc[n] || n;
+    const ahoraStr = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'short', timeStyle: 'medium' });
+    const usuario = await resolverUsuarioActual(token, regIds);
+    const descansosSet = new Set((catInfo.descansos || '').split('-').map(s => s.trim()).filter(Boolean));
+
+    const lote = diasAcrear.map(fecha => {
+      const fechaObj = new Date(fecha + 'T00:00:00Z');
+      const diaLargo = DIA_CORTO_A_LARGO[DIAS_SEMANA[(fechaObj.getUTCDay() + 6) % 7]];
+      const codigo = descansosSet.has(diaLargo) ? 'D' : 'F';
+      return {
+        itemId: null,
+        fields: {
+          [ic('IDColab')]: idColab,
+          [ic('Nombre')]: nombre,
+          [ic('Fecha')]: fecha + 'T12:00:00Z',
+          [ic('Codigo')]: codigo,
+          [ic('HoraEnt')]: '',
+          [ic('HoraSal')]: '',
+          [ic('Semana')]: semana,
+          [ic('YearSemana')]: year,
+          [ic('Cerrado')]: 'No',
+          [ic('GuardadoPor')]: `${usuario.correo} (Semana Vacaciones)`,
+          [ic('FechaGuardado')]: ahoraStr,
+        },
+      };
+    });
+
+    const res = await incEnviarLoteConReintentos(token, regIds, lote);
+    let mensajeFinal = `Listo. ${res.ok} día(s) creados, ${res.errores} errores.`;
+    if (res.primerError) mensajeFinal += ` Detalle: ${res.primerError}`;
+    log.textContent = mensajeFinal;
+    await incAvisar(mensajeFinal + '\n\nYa puedes ir a Registro Incidencias, buscar este colaborador en esa semana, y capturar la V de Vacaciones en los días que correspondan.');
+    btnCrear.classList.add('hidden');
+    document.getElementById('cdVacResumen').classList.add('hidden');
+    cdVacEstado = null;
+  } catch (err) {
+    console.error(err);
+    log.textContent = 'Error: ' + err.message;
+    await incAvisar('Error creando la semana: ' + err.message);
+  } finally {
+    btnCrear.disabled = false;
+  }
+}
+
+document.getElementById('cdVacBtnBuscar').addEventListener('click', cdVacRevisar);
+document.getElementById('cdVacBtnCrear').addEventListener('click', cdVacCrear);
 
 /* ============================================================
  * MODAL PROPIO — reemplaza confirm()/alert() nativos
