@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v103]</title>
+<title>Biométricos Colaboradores | Ubictum [v104]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v103</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v104</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -4111,10 +4111,22 @@ async function incBuscar(){
         codigo: f[ic('Codigo')] || '',
         horaEnt: f[ic('HoraEnt')] || '',
         horaSal: f[ic('HoraSal')] || '',
+        // Cerrado propio de ESTE día exacto — no el agregado de info.cerrado
+        // (ese se calcula sobre el rango ampliado ±1 día usado para la
+        // consulta a Graph, y por eso "sangra" hacia la semana vecina cuando
+        // el día límite de esa semana cae dentro del margen).
+        cerrado: String(f[ic('Cerrado')] || '').trim().toLowerCase() === 'sí' || String(f[ic('Cerrado')] || '').trim().toLowerCase() === 'si',
       });
     });
 
-    const HOY_STR = new Date().toISOString().slice(0, 10);
+    // "Hoy" en la zona horaria de Ubictum (Ciudad de México), NO en UTC.
+    // new Date().toISOString() da la fecha en UTC, que se adelanta al día
+    // siguiente desde las 18:00 hora local (México es UTC-6) — eso hacía
+    // que, pasando esa hora, el sistema tratara el día de HOY como si ya
+    // fuera "pasado", bloqueando a Facilitador/Líder para capturar V (u
+    // otros códigos) en el día de hoy — solo Admin podía, porque a Admin no
+    // le aplica esta restricción en absoluto.
+    const HOY_STR = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
     const filas = [];
     // Antes se iteraba solo sobre porColab (colaboradores con al menos una
@@ -4162,7 +4174,17 @@ async function incBuscar(){
         lider: (catColabInfoFallback && catColabInfoFallback.lider) || '',
         jornada: (catColabInfoFallback && catColabInfoFallback.jornada) || '',
       };
-      const cerrado = !!(infoGuardado && infoGuardado.cerrado);
+      // "cerrado" a nivel semana: se calcula SOLO con los 7 días exactos de
+      // ESTA semana, nunca con info.cerrado (ese es el agregado del rango
+      // ampliado ±1 día que se usa para la consulta a Graph — usarlo aquí
+      // hacía que cerrar/abrir una semana "sangrara" a la semana vecina en
+      // cuanto su día límite caía dentro de ese margen).
+      const fechasEstaSemana = [];
+      for (let i = 0; i < 7; i++) fechasEstaSemana.push(new Date(lunes.getTime() + i * 86400000).toISOString().slice(0, 10));
+      const cerrado = infoGuardado ? fechasEstaSemana.some(fd => {
+        const rg = infoGuardado.porFecha.get(fd);
+        return rg && rg.cerrado;
+      }) : false;
       const estatus = cerrado ? 'cerrada' : (infoGuardado ? 'guardado' : 'sinGuardar');
 
       // "Lo mío": Facilitador/Líder sin ningún rol elevado solo ven a sus
@@ -4363,23 +4385,30 @@ function incRenderTabla(){
       // 10 min después del inicio de Jornada), preselecciona "R" en vez de
       // "A". Si no hay checada real, se respeta lo ya guardado; si no hay
       // nada de nada, F por default (D si ese día es descanso registrado).
-      // EXCEPCIÓN: un código I/II ya guardado (Incapacidad, autoridad de
-      // Enfermería) nunca se sobreescribe por esta detección automática,
-      // aunque exista una checada parcial ese día (ej. el colaborador entró
-      // y se retiró por incapacidad sin registrar salida) — médicamente la
-      // incapacidad manda sobre la asistencia detectada.
+      // EXCEPCIÓN 1: un código I/II/RJ/P ya guardado (autoridad de
+      // Enfermería o TyC/Admin) nunca se sobreescribe por esta detección
+      // automática, aunque exista una checada parcial ese día — la decisión
+      // de un rol elevado manda sobre la asistencia detectada.
+      // EXCEPCIÓN 2: un día de descanso registrado en CatColab manda sobre
+      // la detección automática de checada — si el colaborador vino a
+      // trabajar su día de descanso, el día se sigue mostrando como "D" por
+      // default (el líder lo puede cambiar a mano en el combo si de verdad
+      // se le quiere reconocer ese día como asistencia).
+      const catColabInfo = cdCatColab ? cdCatColab.get(r.idColab) : null;
+      const diaLargo = DIA_CORTO_A_LARGO[DIAS_SEMANA[idx]];
+      const esDescanso = !!(catColabInfo && catColabInfo.descansos &&
+        catColabInfo.descansos.split('-').map(s => s.trim()).includes(diaLargo));
+
       let codigoDefault;
-      if (bv.tipo === 'guardado' && (bv.codigo === 'I' || bv.codigo === 'II')) {
+      if (bv.tipo === 'guardado' && (bv.codigo === 'I' || bv.codigo === 'II' || bv.codigo === 'RJ' || bv.codigo === 'P')) {
         codigoDefault = bv.codigo;
+      } else if (esDescanso && (bv.tipo !== 'guardado' || bv.codigo === 'D')) {
+        codigoDefault = 'D';
       } else if (d.sesionReal) {
         codigoDefault = esRetardoHoy ? 'R' : 'A';
       } else if (bv.tipo === 'guardado') {
         codigoDefault = bv.codigo;
       } else {
-        const catColabInfo = cdCatColab ? cdCatColab.get(r.idColab) : null;
-        const diaLargo = DIA_CORTO_A_LARGO[DIAS_SEMANA[idx]];
-        const esDescanso = !!(catColabInfo && catColabInfo.descansos &&
-          catColabInfo.descansos.split('-').map(s => s.trim()).includes(diaLargo));
         codigoDefault = esDescanso ? 'D' : 'F';
       }
 
