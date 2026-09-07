@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v104]</title>
+<title>Biométricos Colaboradores | Ubictum [v105]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v104</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v105</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1426,6 +1426,7 @@ async function cargarCatalogos(token, ids){
         lider: f[cc('Lider')] || '',
         jornada: f[cc('Jornada')] || '',
         descansos: f[cc('Descansos')] || '',
+        estatus: f[cc('Estatus')] || '',
       });
     }
   });
@@ -1534,6 +1535,15 @@ function construirFechaHora(fecha, hora){
     return null;
   }
   return dt;
+}
+
+// Conservador a propósito: si el Estatus viene vacío o con un valor que no
+// reconoce, se asume activo (mejor mostrar de más que ocultar a alguien que
+// sí sigue activo). Solo excluye si el texto claramente indica baja/inactivo.
+function esEstatusActivo(estatus){
+  const e = String(estatus || '').trim().toLowerCase();
+  if (!e) return true;
+  return !e.includes('baja') && !e.includes('inactiv') && !e.includes('terminad') && e !== 'no';
 }
 
 function agruparEnSesiones(registrosOrdenados, esNocturno){
@@ -4129,13 +4139,19 @@ async function incBuscar(){
     const HOY_STR = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
     const filas = [];
-    // Antes se iteraba solo sobre porColab (colaboradores con al menos una
-    // checada real en la semana consultada), así que un colaborador sin
-    // NINGUNA checada esa semana (ej. vacaciones desde el lunes) desaparecía
-    // por completo del listado, aunque ya tuviera días creados/guardados en
-    // RegIncidencias (ver "Crear Semana por Vacaciones" en Carga de Data).
-    // Ahora se recorre la unión de ambas fuentes.
-    const idsColabTodos = new Set([...porColab.keys(), ...incCerradosMap.keys()]);
+    // Antes se iteraba solo sobre colaboradores con al menos una checada real
+    // o algo ya guardado esa semana. Eso dejaba fuera a un colaborador que
+    // está de vacaciones TODA la semana (cero checadas, cero guardado): su
+    // fila no aparecía en absoluto, así que Facilitador/Líder no tenían
+    // dónde capturar la V — dependían de que Admin/TyC corriera antes
+    // "Crear Semana por Vacaciones" en Carga de Data. Ahora también se
+    // incluye a cualquier colaborador ACTIVO de CatColab, tenga o no datos
+    // esa semana, para que el líder pueda actuar por su cuenta.
+    const idsColabConDatos = new Set([...porColab.keys(), ...incCerradosMap.keys()]);
+    const idsColabActivos = cdCatColab
+      ? [...cdCatColab.entries()].filter(([, info]) => esEstatusActivo(info.estatus)).map(([id]) => id)
+      : [];
+    const idsColabTodos = new Set([...idsColabConDatos, ...idsColabActivos]);
     idsColabTodos.forEach(idColab => {
       const registros = porColab.get(idColab) || [];
       const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
@@ -4155,9 +4171,10 @@ async function incBuscar(){
       });
 
       const infoGuardado = incCerradosMap.get(idColab);
-      // Solo se descarta al colaborador si NO hay checada real ninguna Y
-      // TAMPOCO hay nada guardado en RegIncidencias esa semana.
-      if (porDiaSesion.every(d => d === null) && !infoGuardado) return;
+      // Ya no se descarta por falta de datos: si el colaborador llegó hasta
+      // aquí es porque tiene checada, tiene algo guardado, o es un activo de
+      // CatColab que se agregó a propósito (ver idsColabActivos arriba) para
+      // que su fila exista aunque su semana esté completamente vacía.
 
       const diaConDatos = porDiaSesion.find(d => d);
       const catColabInfoFallback = cdCatColab ? cdCatColab.get(idColab) : null;
