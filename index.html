@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v105]</title>
+<title>Biométricos Colaboradores | Ubictum [v106]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v105</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v106</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -4402,22 +4402,22 @@ function incRenderTabla(){
       // 10 min después del inicio de Jornada), preselecciona "R" en vez de
       // "A". Si no hay checada real, se respeta lo ya guardado; si no hay
       // nada de nada, F por default (D si ese día es descanso registrado).
-      // EXCEPCIÓN 1: un código I/II/RJ/P ya guardado (autoridad de
-      // Enfermería o TyC/Admin) nunca se sobreescribe por esta detección
-      // automática, aunque exista una checada parcial ese día — la decisión
-      // de un rol elevado manda sobre la asistencia detectada.
-      // EXCEPCIÓN 2: un día de descanso registrado en CatColab manda sobre
-      // la detección automática de checada — si el colaborador vino a
-      // trabajar su día de descanso, el día se sigue mostrando como "D" por
-      // default (el líder lo puede cambiar a mano en el combo si de verdad
-      // se le quiere reconocer ese día como asistencia).
+      //
+      // REGLA GENERAL (no lista de excepciones código por código — eso ya
+      // nos mordió tres veces: primero con I, luego con RJ, luego con V):
+      // cualquier código YA GUARDADO que no sea F ni A se respeta siempre,
+      // sin importar si hay checada real ese día. F es justo el "sin dato
+      // todavía" que la detección automática tiene sentido corregir; A es
+      // exactamente lo que la detección automática asignaría de todas
+      // formas. Cualquier otro código (PSG, V, D, P, R, RJ, I, II) fue una
+      // decisión explícita de alguien y nunca se sobreescribe sola.
       const catColabInfo = cdCatColab ? cdCatColab.get(r.idColab) : null;
       const diaLargo = DIA_CORTO_A_LARGO[DIAS_SEMANA[idx]];
       const esDescanso = !!(catColabInfo && catColabInfo.descansos &&
         catColabInfo.descansos.split('-').map(s => s.trim()).includes(diaLargo));
 
       let codigoDefault;
-      if (bv.tipo === 'guardado' && (bv.codigo === 'I' || bv.codigo === 'II' || bv.codigo === 'RJ' || bv.codigo === 'P')) {
+      if (bv.tipo === 'guardado' && bv.codigo !== 'F' && bv.codigo !== 'A') {
         codigoDefault = bv.codigo;
       } else if (esDescanso && (bv.tipo !== 'guardado' || bv.codigo === 'D')) {
         codigoDefault = 'D';
