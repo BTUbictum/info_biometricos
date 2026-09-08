@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v106]</title>
+<title>Biométricos Colaboradores | Ubictum [v108]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -467,7 +467,7 @@
 <body>
 
 <header>
-  <div class="brand" onclick="window.location.href='https://btubictum.github.io/U-Home/'" title="Regresar a U-Home">
+  <div class="brand" onclick="window.location.href='https://ubictumhome.z41.web.core.windows.net/'" title="Regresar a U-Home">
     <strong>UBICTUM</strong>
     <span>La puerta de entrada al mercado</span>
   </div>
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v106</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v108</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1082,7 +1082,10 @@ const msalConfig = {
   auth: {
     clientId: "390003b8-ac7e-4b28-95fa-92da2fbe08de",
     authority: "https://login.microsoftonline.com/5b149376-e794-49a0-a90d-7e8dab892910",
-    redirectUri: "https://btubictum.github.io/info_biometricos/",
+    // Antes fijo a GitHub Pages — se rompía el login al mover el archivo
+    // a otro hosting (ej. Azure Storage). Ahora se adapta solo al
+    // dominio/ruta real desde donde se sirva.
+    redirectUri: window.location.origin + window.location.pathname,
   },
   cache: {
     cacheLocation: "localStorage",
@@ -1438,6 +1441,29 @@ async function cargarCatalogos(token, ids){
  * ============================================================ */
 function parseGrupoCarga(grupo){
   const partes = String(grupo || '').split('>').map(p => p.trim());
+
+  // TR4: siempre se toma (no exige "Almacén" en ningún nivel, a diferencia
+  // de TR3). A estos les falta un nivel respecto a TR3 — el turno y el área
+  // vienen juntos en un solo nivel (ej. "VESPERTINO UBI 2"): la primera
+  // palabra es el turno (VESPERTINO/DIURNO/etc.) y el resto del texto es
+  // el área (ej. "UBI 2", para que no quede vacía). El siguiente nivel es
+  // el Tipo, igual que en TR3 (Sindicalizado, etc.).
+  const idxTR4 = partes.findIndex(p => p === 'TR4');
+  if (idxTR4 !== -1) {
+    const nivelA = partes[idxTR4 + 1] || '';
+    const espacio = nivelA.indexOf(' ');
+    const turno = espacio === -1 ? nivelA : nivelA.slice(0, espacio);
+    const area = espacio === -1 ? '' : nivelA.slice(espacio + 1).trim();
+    return {
+      grupo: 'TR4',
+      turno,
+      area,
+      tipo: partes[idxTR4 + 2] || '',
+    };
+  }
+
+  // TR3 (y cualquier otro caso): regla original sin cambios — solo se toma
+  // si contiene "Almacén" en algún nivel.
   const idx = partes.findIndex(p => p === 'Almacén' || p === 'Almacen');
   if (idx === -1) return null; // Nivel 4 no es Almacén -> se descarta
   return {
