@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Biométricos Colaboradores | Ubictum [v108]</title>
+<title>Biométricos Colaboradores | Ubictum [v109]</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -493,7 +493,7 @@
   <button class="tabbtn" data-tab="biometrico" type="button">Registros por Biométrico</button>
   <button class="tabbtn" data-tab="incidencias" type="button">Registro Incidencias</button>
   <button class="tabbtn" data-tab="carga" type="button" style="margin-left:auto;">Carga de Data</button>
-  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v108</span>
+  <span style="align-self:center;margin-left:12px;color:rgba(255,255,255,.35);font-size:11px;font-family:'IBM Plex Mono',monospace;">v109</span>
 </div>
 
 <div class="tabpanel active" id="tab-registros">
@@ -1572,6 +1572,22 @@ function esEstatusActivo(estatus){
   return !e.includes('baja') && !e.includes('inactiv') && !e.includes('terminad') && e !== 'no';
 }
 
+// TR4 checa en varios lectores durante el día (no solo el de
+// entrada/salida real) — eso inflaba las sesiones armadas por
+// agruparEnSesiones con checadas que no son su entrada/salida verdadera
+// (causa real detectada de Horas Extra absurdas, ej. 47h en una semana).
+// Para colaboradores TR4, SOLO el biométrico "UBI2 Asistencia almacén"
+// cuenta como entrada/salida real; el resto de sus checadas ese día se
+// descarta aquí. Para TR3 (Almacén) no cambia nada. Este filtro se aplica
+// únicamente antes de armar sesiones (Carga de Data al insertar, Horas
+// Extra en registros existentes, Registros por Día/Semana, Registro
+// Incidencias) — "Registros" y "Registros por Biométrico" siguen
+// mostrando TODAS las checadas sin este filtro, tal cual vienen del Excel.
+const BIOMETRICO_REAL_TR4 = 'UBI2 Asistencia almacén';
+function filtrarChecadasParaSesion(registros){
+  return registros.filter(r => r.grupo !== 'TR4' || r.biometrico === BIOMETRICO_REAL_TR4);
+}
+
 function agruparEnSesiones(registrosOrdenados, esNocturno){
   const sesiones = [];
   let i = 0;
@@ -1677,7 +1693,7 @@ function construirRegistrosParaSubir(porColab, camposMapa){
   const sinMatchCatColab = new Set();
   const c = (displayName) => camposMapa[displayName] || displayName;
   porColab.forEach((registros, idColab) => {
-    const ordenados = registros.slice().sort((a,b) => a.dt - b.dt);
+    const ordenados = filtrarChecadasParaSesion(registros).sort((a,b) => a.dt - b.dt);
     const catColabInfo = cdCatColab.get(idColab) || { facilitador: '', lider: '', jornada: '', descansos: '' };
     const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(catColabInfo.jornada));
     sesiones.forEach(sesion => {
@@ -2318,6 +2334,8 @@ document.getElementById('cdHeBtnBuscar').addEventListener('click', async () => {
     const campoHora = camposMapa['Hora'] || 'Hora';
     const campoIDColab = camposMapa['IDColab'] || 'IDColab';
     const campoHoraExtra = camposMapa['HoraExtra'] || 'HoraExtra';
+    const campoGrupo = camposMapa['Grupo'] || 'Grupo';
+    const campoBiometrico = camposMapa['Biometrico'] || 'Biometrico';
 
     cdHeLog(`Buscando checadas entre ${desde} y ${hasta}…`);
     // Margen de 1 día de cada lado para no cortar sesiones nocturnas en el borde del rango.
@@ -2328,7 +2346,7 @@ document.getElementById('cdHeBtnBuscar').addEventListener('click', async () => {
     hastaISO.setTime(hastaISO.getTime() + unDiaMs);
     const filtro = encodeURIComponent(`fields/${campoFecha} ge '${desdeISO.toISOString()}' and fields/${campoFecha} le '${hastaISO.toISOString()}'`);
     const url = `${GRAPH}/sites/${ids.siteId}/lists/${ids.listIds.registros}/items` +
-      `?expand=fields(select=${campoIDColab},${campoFecha},${campoHora},${campoHoraExtra})` +
+      `?expand=fields(select=${campoIDColab},${campoFecha},${campoHora},${campoHoraExtra},${campoGrupo},${campoBiometrico})` +
       `&$filter=${filtro}&$top=5000`;
     const items = await graphFetchAll(url, token);
 
@@ -2340,6 +2358,8 @@ document.getElementById('cdHeBtnBuscar').addEventListener('click', async () => {
       return {
         itemId: it.id,
         idColab: String(f[campoIDColab] || '').trim(),
+        grupo: f[campoGrupo] || '',
+        biometrico: f[campoBiometrico] || '',
         dt: construirFechaHora(fecha, hora),
         horaExtraActual: (he === 0 || he) ? he : null,
       };
@@ -2355,7 +2375,7 @@ document.getElementById('cdHeBtnBuscar').addEventListener('click', async () => {
     const pendientes = [];
 
     porColab.forEach((registros, idColab) => {
-      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const ordenados = filtrarChecadasParaSesion(registros).sort((a, b) => a.dt - b.dt);
       const catColabInfo = cdCatColab.get(idColab);
       const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(catColabInfo ? catColabInfo.jornada : ''));
       sesiones.forEach(sesion => {
@@ -3190,7 +3210,7 @@ async function diaBuscar(){
     const desdeAmpliado = new Date(new Date(desdeStr + 'T00:00:00Z').getTime() - unDiaMs).toISOString();
     const hastaAmpliado = new Date(new Date(hastaStr + 'T00:00:00Z').getTime() + unDiaMs).toISOString();
 
-    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada']
+    const campos = ['IDColab','Nombre','Grupo','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada']
       .map(n => c(n)).join(',');
     const filtro = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
     const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtro}&$top=2000`;
@@ -3205,6 +3225,7 @@ async function diaBuscar(){
         nombre: f[c('Nombre')] || '',
         turno: f[c('TurnoAsignado')] || '',
         area: f[c('Area')] || '',
+        grupo: f[c('Grupo')] || '',
         biometrico: f[c('Biometrico')] || '',
         fecha, hora,
         facilitador: f[c('Facilitador')] || '',
@@ -3224,7 +3245,7 @@ async function diaBuscar(){
 
     const filas = [];
     porColab.forEach(registros => {
-      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const ordenados = filtrarChecadasParaSesion(registros).sort((a, b) => a.dt - b.dt);
       const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(ordenados[0] ? ordenados[0].idColab : '', ordenados[0] ? ordenados[0].jornada : '')));
       sesiones.forEach(sesion => {
         const entrada = sesion.registros[0];
@@ -3435,7 +3456,7 @@ async function semBuscar(){
     const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
     const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
 
-    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada','HoraExtra']
+    const campos = ['IDColab','Nombre','Grupo','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada','HoraExtra']
       .map(n => c(n)).join(',');
     const filtro = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
     const url = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtro}&$top=5000`;
@@ -3452,6 +3473,7 @@ async function semBuscar(){
         nombre: f[c('Nombre')] || '',
         turno: f[c('TurnoAsignado')] || '',
         area: f[c('Area')] || '',
+        grupo: f[c('Grupo')] || '',
         biometrico: f[c('Biometrico')] || '',
         fecha, hora,
         facilitador: f[c('Facilitador')] || '',
@@ -3472,7 +3494,7 @@ async function semBuscar(){
 
     const filas = [];
     porColab.forEach(registros => {
-      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const ordenados = filtrarChecadasParaSesion(registros).sort((a, b) => a.dt - b.dt);
       const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(ordenados[0] ? ordenados[0].idColab : '', ordenados[0] ? ordenados[0].jornada : '')));
 
       // Días de esa semana (0=Lun..6=Dom) con su sesión correspondiente.
@@ -4087,7 +4109,7 @@ async function incBuscar(){
     const desdeAmpliado = new Date(lunes.getTime() - unDiaMs).toISOString();
     const hastaAmpliado = new Date(domingo.getTime() + unDiaMs).toISOString();
 
-    const campos = ['IDColab','Nombre','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada','HoraExtra']
+    const campos = ['IDColab','Nombre','Grupo','TurnoAsignado','Area','Biometrico','Fecha','Hora','Facilitador','Lider','Jornada','HoraExtra']
       .map(n => c(n)).join(',');
     const filtroReg = encodeURIComponent(`fields/${c('Fecha')} ge '${desdeAmpliado}' and fields/${c('Fecha')} le '${hastaAmpliado}'`);
     const urlReg = `${GRAPH}/sites/${regIds.siteId}/lists/${regIds.listIds.registros}/items?expand=fields(select=${campos})&$filter=${filtroReg}&$top=5000`;
@@ -4100,7 +4122,7 @@ async function incBuscar(){
       return {
         idColab: f[c('IDColab')] || '', nombre: f[c('Nombre')] || '',
         turno: f[c('TurnoAsignado')] || '', area: f[c('Area')] || '',
-        biometrico: f[c('Biometrico')] || '', fecha, hora,
+        grupo: f[c('Grupo')] || '', biometrico: f[c('Biometrico')] || '', fecha, hora,
         facilitador: f[c('Facilitador')] || '', lider: f[c('Lider')] || '',
         jornada: f[c('Jornada')] || '', dt: construirFechaHora(fecha, hora),
         horaExtra: (he === 0 || he) ? he : null,
@@ -4180,7 +4202,7 @@ async function incBuscar(){
     const idsColabTodos = new Set([...idsColabConDatos, ...idsColabActivos]);
     idsColabTodos.forEach(idColab => {
       const registros = porColab.get(idColab) || [];
-      const ordenados = registros.slice().sort((a, b) => a.dt - b.dt);
+      const ordenados = filtrarChecadasParaSesion(registros).sort((a, b) => a.dt - b.dt);
       const sesiones = agruparEnSesiones(ordenados, esJornadaNocturna(jornadaVigenteODeSnapshot(idColab, ordenados[0] ? ordenados[0].jornada : '')));
 
       const porDiaSesion = new Array(7).fill(null);
